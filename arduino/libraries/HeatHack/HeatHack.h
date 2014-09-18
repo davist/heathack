@@ -1,5 +1,5 @@
-#ifndef JEELIB_PORTS_H
-#define JEELIB_PORTS_H
+#ifndef HEATHACK_H
+#define HEATHACK_H
 
 #if ARDUINO >= 100
 #include <Arduino.h> // Arduino 1.0
@@ -58,16 +58,19 @@
 #endif
 
 // sensor types
-enum HHSensorType {
-	UNDEFINED   = 0,
-	TEMPERATURE = 1,
-	HUMIDITY    = 2,
-	LIGHT       = 3,
-	MOVEMENT    = 4,
-	PRESSURE    = 5,
-	SOUND       = 6
-};
+namespace HHSensorType {
+    enum type {
+        UNDEFINED   = 0,
+        TEMPERATURE = 1,
+        HUMIDITY    = 2,
+        LIGHT       = 3,
+        MOVEMENT    = 4,
+        PRESSURE    = 5,
+        SOUND       = 6
+    };
+}
  
+/* 
 char* HHSensorTypeNames[] = {
 	"Undefined",
 	"Temperature",
@@ -77,6 +80,7 @@ char* HHSensorTypeNames[] = {
 	"Pressure",
 	"Sound"
 };
+*/
  
 struct HHReading {
 	byte sensorType : 4;
@@ -84,7 +88,7 @@ struct HHReading {
 	int16_t reading;
 	
 	inline void clear() {
-		sensorType = UNDEFINED;
+		sensorType = HHSensorType::UNDEFINED;
 		sensorNumber = 0;
 		reading = 0;
 	}
@@ -108,7 +112,7 @@ struct HeatHackData {
 	}
 	
 	// add a sensor reading into the packet
-	bool addReading(byte sensorNumber, HHSensorType type, int16_t value) {
+	bool addReading(byte sensorNumber, HHSensorType::type type, int16_t value) {
 	
 		if (numReadings < HH_MAX_READINGS) {
 		
