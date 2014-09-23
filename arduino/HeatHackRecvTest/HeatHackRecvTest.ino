@@ -43,7 +43,7 @@ void loop() {
     if (data->sequence != lastSequence[node-1]) {
       lastSequence[node-1] = data->sequence;
     
-      Serial.print("Data from node ");
+      Serial.print("\nData from node ");
       Serial.print(node);
       Serial.print(" seq ");
       Serial.println(data->sequence);
@@ -54,7 +54,9 @@ void loop() {
         Serial.print(": ");
         Serial.print(HHSensorTypeNames[data->readings[i].sensorType]);
         Serial.print(" ");
-        Serial.println((float)(data->readings[i].reading / 10.0));
+        Serial.print(data->readings[i].reading / 10);
+        Serial.print(".");
+        Serial.println(data->readings[i].reading % 10);
       }
     }
     

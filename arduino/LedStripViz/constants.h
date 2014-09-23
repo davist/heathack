@@ -31,8 +31,8 @@ extern CRGB leds[];
 #define BUTTON_CHANGE_PATTERN 2
 
 // dht11 sensor
-#define DHT11_PIN 2
-#define DHT11_INTERRUPT 0
+#define DHT11_PIN PORT_IRQ_AS_DIO
+#define DHT11_INTERRUPT PORT_IRQ
 #define DHT11_WAIT_TIME 2000
 
 // dallas temp sensor
@@ -46,12 +46,13 @@ extern CRGB leds[];
 #define MIN_HOT_TEMP 16
 
 // value returned by getReading if one wasn't available
-#define NO_READING 255
+#define NO_READING -32767
 
 //jeenode radio
 #define RADIO_GROUP_ID 212
-#define RADIO_OUR_NODE_ID 0            // we only listen, so not important
-#define RADIO_REMOTE_NODE_ID 2         // node we're listening to
-#define POLL_INTERVAL_US 1000          // check every 1 ms
+#define RADIO_OUR_NODE_ID 1            // we only listen, so not important
+#define RADIO_REMOTE_NODE_ID 15        // node we're listening to
+#define RADIO_POLL_INTERVAL_US 1000    // check every 1 ms
+#define MIN_RADIO_CYCLES 10
 
 #endif

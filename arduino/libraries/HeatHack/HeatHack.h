@@ -54,6 +54,7 @@
 #define PORT4_AIO 3
 
 #define PORT_IRQ_AS_DIO 3
+#define PORT_IRQ 1
 
 #endif
 
@@ -64,23 +65,15 @@ namespace HHSensorType {
         TEMPERATURE = 1,
         HUMIDITY    = 2,
         LIGHT       = 3,
-        MOVEMENT    = 4,
+        MOTION      = 4,
         PRESSURE    = 5,
-        SOUND       = 6
+        SOUND       = 6,
+        LOW_BATT    = 7
     };
 }
  
-/* 
-char* HHSensorTypeNames[] = {
-	"Undefined",
-	"Temperature",
-	"Humidity",
-	"Light",
-	"Movement",
-	"Pressure",
-	"Sound"
-};
-*/
+extern char* HHSensorTypeNames[];
+ 
  
 struct HHReading {
 	byte sensorType : 4;

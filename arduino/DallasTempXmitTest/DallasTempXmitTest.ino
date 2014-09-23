@@ -92,6 +92,11 @@ void loop() {
   
   static unsigned long lastAckTime = millis();
   
+  // Note, if using parasitic power, you must request *all* temperatures, not a specific device address
+  // and *must not* try accessing the device until the maximum 'time to wait for conversion' has expired.
+  // Attempting to access the device while it's taking a reading will disrupt the power and result
+  // in a reading of 85C.
+  
   // get reading
   sensors.requestTemperatures();
 
