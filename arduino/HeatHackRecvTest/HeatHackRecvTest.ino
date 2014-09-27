@@ -11,7 +11,7 @@ byte lastSequence[30];
 void setup() {
 
   Serial.begin(57600);
-  
+/*  
   Serial.println("JeeNode HeatHack receive test");
 
   Serial.print("Using group id ");
@@ -19,7 +19,7 @@ void setup() {
   Serial.print(" and node id ");
   Serial.println(NODE_ID);
   Serial.println();
-    
+*/    
   // initialise transceiver
   rf12_initialize(NODE_ID, RF12_868MHZ, GROUP_ID);
   
@@ -42,7 +42,25 @@ void loop() {
     // then data is resent so ignore it.
     if (data->sequence != lastSequence[node-1]) {
       lastSequence[node-1] = data->sequence;
-    
+ 
+      Serial.print("heathack ");
+      Serial.print(node);
+      Serial.print(" ");
+        
+      for (byte i=0; i<data->numReadings; i++) {
+        Serial.print(data->readings[i].sensorNumber);
+        Serial.print(" ");
+        Serial.print(data->readings[i].sensorType);
+        Serial.print(" ");
+        Serial.print(data->readings[i].reading / 10);
+        Serial.print(".");
+        Serial.print(data->readings[i].reading % 10);
+        Serial.print(" ");
+      }
+
+      Serial.println();
+ 
+/*    
       Serial.print("\nData from node ");
       Serial.print(node);
       Serial.print(" seq ");
@@ -58,6 +76,7 @@ void loop() {
         Serial.print(".");
         Serial.println(data->readings[i].reading % 10);
       }
+*/      
     }
     
     // send ack if required
