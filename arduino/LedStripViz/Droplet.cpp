@@ -54,15 +54,6 @@ void Droplet::update(Accumulation* pile) {
   }
 }
 
-// raise n to the power e, treating n as a fraction from 0/256 to 255/256
-uint8_t Droplet::pow8(uint8_t n, uint8_t e) {
-  uint8_t result = n;
-  while (e > 1) {
-    result = scale8(result, n);
-    e--;
-  }
-  return result;
-}
 
 void Droplet::render() {
   if (!isActive) return;

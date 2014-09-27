@@ -18,10 +18,13 @@ extern CRGB leds[];
 // animation speed in frames per second
 #define FPS 30
 // time per frame in ms
-#define FRAME_TIME (1000/FPS)
+#define FRAME_TIME (1000/(FPS))
 
 // time for switching between patterns and running previous one down to black
 #define PATTERN_CHANGE_TIME 2000
+
+#define GLOBAL_FADE_STEP 5
+//((256 / ((PATTERN_CHANGE_TIME) / (FRAME_TIME)) ) * 2)
 
 // buttons and leds
 #define BLINK_PLUG_PORT 4
@@ -43,7 +46,7 @@ extern CRGB leds[];
 #define REQUIRESALARMS false
 
 // changeover point from hot to cold patterns
-#define MIN_HOT_TEMP 16
+#define MIN_HOT_TEMP 160
 
 // value returned by getReading if one wasn't available
 #define NO_READING -32767

@@ -18,9 +18,6 @@ class PatternPrecipitation : public Pattern {
   Droplet droplets[PRECIP_NUM_DROPLETS];  
   Accumulation pile;
 
-  // for fading out  
- // uint8_t dropletBrightness;
-
   uint8_t nextDropletCounter;
   uint8_t nextDropletStep;
     

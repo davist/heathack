@@ -3,96 +3,10 @@
 PatternPrecipitation::PatternPrecipitation(const PrecipConfig* config) {
 
   this->config = config;
-/*
-  Serial.print("pileColour.r ");  
-  Serial.println(config->pileColour.r);
-
-  Serial.print("pileColour.g ");  
-  Serial.println(config->pileColour.g);
-
-  Serial.print("pileColour.b ");  
-  Serial.println(config->pileColour.b);
-  
-  Serial.print("bgColour.r ");  
-  Serial.println(config->bgColour.r);
-
-  Serial.print("bgColour.g ");  
-  Serial.println(config->bgColour.g);
-
-  Serial.print("bgColour.b ");  
-  Serial.println(config->bgColour.b);
-  
-  Serial.print("dropletColour.h ");  
-  Serial.println(config->dropletColour.h);
-
-  Serial.print("dropletColour.s ");  
-  Serial.println(config->dropletColour.s);
-
-  Serial.print("dropletColour.v ");  
-  Serial.println(config->dropletColour.v);
-  
-  Serial.print("nextDropletTrigger ");  
-  Serial.println(config->nextDropletTrigger);
-  
-  Serial.print("glintValue ");  
-  Serial.println(config->glintValue);
-  
-  Serial.print("glintStep ");  
-  Serial.println(config->glintStep);
-  
-  Serial.print("pileGrowViaDroplets ");  
-  Serial.println(config->pileGrowViaDroplets);
-  
-  Serial.print("pileMeltRate ");  
-  Serial.println(config->pileMeltRate);
-  
-  Serial.print("pileGrowRate ");  
-  Serial.println(config->pileGrowRate);
-  
-  Serial.print("pileDropletIncrement ");  
-  Serial.println(config->pileDropletIncrement);
-  
-  Serial.print("pileSplashHeight ");  
-  Serial.println(config->pileSplashHeight);
-  
-  Serial.print("pileWaveHeight ");  
-  Serial.println(config->pileWaveHeight);
-  
-  Serial.print("pileWaveFreq ");  
-  Serial.println(config->pileWaveFreq);
-  
-  Serial.print("pileWaveSplashHeight ");  
-  Serial.println(config->pileWaveSplashHeight);
-  
-  Serial.print("pileWaveSplashFreq ");  
-  Serial.println(config->pileWaveSplashFreq);
-  
-  Serial.print("pileWaveStep ");  
-  Serial.println(config->pileWaveStep);
-  
-  Serial.print("dropletInitSpeed ");  
-  Serial.println(config->dropletInitSpeed);
-  
-  Serial.print("dropletAcceleration ");  
-  Serial.println(config->dropletAcceleration);
-  
-  Serial.print("dropletShininess ");  
-  Serial.println(config->dropletShininess);
-  
-  Serial.print("dropletRotationFast ");  
-  Serial.println(config->dropletRotationFast);
-  
-  Serial.print("dropletRotationSlow ");  
-  Serial.println(config->dropletRotationSlow);
-  
-  Serial.print("dropletValueRange ");  
-  Serial.println(config->dropletValueRange);
-*/
   intensity = 99;
   
   nextDropletCounter = config->nextDropletTrigger;
   nextDropletStep = 0;
- // dropletBrightness = 255;
   
   pile.config = config;
   Droplet::config = config;
@@ -101,8 +15,6 @@ PatternPrecipitation::PatternPrecipitation(const PrecipConfig* config) {
 void PatternPrecipitation::run(uint8_t intensity) { 
 
   uint8_t i;
-  
-  //if (intensity == 0) qsub8(dropletBrightness, 6);
   
   // set pile target height based on intensity (5 - 45)
   if (intensity != this->intensity) {
@@ -165,11 +77,21 @@ void PatternPrecipitation::run(uint8_t intensity) {
 }
 
 
+// raise n to the power e, treating n as a fraction from 0/256 to 255/256
+uint8_t pow8(uint8_t n, uint8_t e) {
+  uint8_t result = n;
+  while (e > 1) {
+    result = scale8(result, n);
+    e--;
+  }
+  return result;
+}
+
 const PrecipConfig PrecipSnow = {
   {150, 150, 150},   // pileColour
-  {24, 43, 115},     // bgColour
+  {4, 8, 20},     // bgColour
   {128, 0, 150},     // dropletColour
-  {105, 105, 105},   // glintColour
+  {255, 255, 255},   // glintColour
   
   250, // nextDropletTrigger
   
@@ -198,11 +120,10 @@ const PrecipConfig PrecipSnow = {
 };
 
 const PrecipConfig PrecipRain = {
-//  {24, 43, 115},   // pileColour
   {43, 75, 255},   // pileColour
   {0, 0, 0},       // bgColour
   {150, 255, 255}, // dropletColour
-  {0, 0, 0},       // glintColour
+  {255, 255, 255},       // glintColour
   
   150, // nextDropletTrigger
   

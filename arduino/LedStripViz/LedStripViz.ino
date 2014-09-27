@@ -65,6 +65,7 @@ void setup() {
   FastLED.addLeds<LED_TYPE, DATA_PIN, RGB_ORDER>(leds, NUM_LEDS);
   // clear down any power-on led randomness asap
   FastLED.setCorrection(TypicalLEDStrip);
+  FastLED.setDither(DISABLE_DITHER);
   FastLED.show();
 
   // initialise Dallas Temp
@@ -126,22 +127,13 @@ void checkButtons(void) {
             break;
           case 3:
             prepareNextPattern(HUM_GAUGE);
+            // switch immediately from temp to humidity gauges so that the level
+            // doesn't bounce up and down a lot
+            changePattern();
             break;
         }
         
       }
-  }
-}
-
-void startStopRadio(void) {
-  
-  if (isLocalSensors) {
-    // stop radio
-    Timer1.detachInterrupt();
-  }
-  else {
-    // start radio
-    Timer1.attachInterrupt(checkRadio, RADIO_POLL_INTERVAL_US);    
   }
 }
 
@@ -266,9 +258,6 @@ void checkRadio(void) {
   
 byte getIntensity(int16_t reading) {
 
-  // convert to actual integer value, dropping decimal place
-  reading = reading / 10;
-
   // calc intensity
   byte intensity;
 
@@ -280,16 +269,16 @@ byte getIntensity(int16_t reading) {
     if (usingTemp) {  
       if (reading < MIN_HOT_TEMP) {
         // cold - intensity increases as temp falls from 15 to 5
-        intensity = 10 - qsub8(reading > 0 ? reading : 0, 5); 
+        intensity = 10 - qsub8(reading > 0 ? reading/10 : 0, 5); 
       }
       else {
         // hot - intensity increases as temp goes from 16 to 36
-        intensity = (reading - MIN_HOT_TEMP) / 2;
+        intensity = (reading - MIN_HOT_TEMP) / 20;
       }
     }
     else {
       // wet - intensity increases from %50 to 90%
-     intensity = (reading > 50 ? reading - 50 : 0) / 4;
+     intensity = (reading > 500 ? (reading - 500)/10 : 0) / 4;
     }
     
     // want 1 - 11 instead of old 0 - 10 so 0 can be for "run down"
@@ -324,7 +313,8 @@ void loop() {
 
   // reading is 10x actual integer value to allow for 1 decimal place
   static int16_t reading=210, lastReading=210;
-
+  static uint8_t globalBrightness = 255;
+  
   static Gauge gauge;
   
   checkButtons();
@@ -353,8 +343,14 @@ void loop() {
 
   lastReading = reading;
   
-  if (nextPattern && millis() > nextPatternStartTime) {
-    changePattern();
+  if (nextPattern) {
+    if (millis() > nextPatternStartTime) {
+      changePattern();
+      globalBrightness = 255;
+    }
+    else {
+      globalBrightness = qsub8(globalBrightness, GLOBAL_FADE_STEP);
+    }
   }
 
   if (showingPattern && curPattern) { 
@@ -380,7 +376,7 @@ void loop() {
     delay(1);
   }
     
-  FastLED.show();
+  FastLED.show(globalBrightness);
 }
 
 void prepareNextPattern(PatternType type) {
@@ -403,6 +399,7 @@ void changePattern() {
       curPattern = new PatternFire2012();
       break;
     case COLD_PATTERN:
+      usingTemp = true;
       showingPattern = true;
       curPattern = new PatternPrecipitation(&PrecipSnow);
       break;

@@ -9,8 +9,8 @@
 #define GAUGE_HUM_G 100
 #define GAUGE_HUM_B 255
 
-#define GLINT_TEMP_R 255
-#define GLINT_TEMP_G 255
+#define GLINT_TEMP_R 0
+#define GLINT_TEMP_G 200
 #define GLINT_TEMP_B 0
 
 #define GLINT_HUM_R 255
@@ -69,8 +69,8 @@ PrecipConfig Gauge::config = {
   
   0, // nextDropletTrigger
   
-  20, // glintStep;
-  30, // glintChance;
+  14, // glintStep;
+  20, // glintChance;
   
   true, // pileGrowViaDroplets
   1, // pileMeltRate;

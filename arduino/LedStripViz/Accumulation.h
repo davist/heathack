@@ -5,7 +5,7 @@
 #include "constants.h"
 #include "PrecipConfig.h"
 
-#define MIN_LEDS_FOR_GLINT 5
+#define MIN_LEDS_FOR_GLINT 8
 
 
 struct Accumulation {
@@ -91,7 +91,16 @@ struct Accumulation {
     
     // if waves enabled, adjust height;
     if (config->pileWaveHeight > 0) {
-      adjHeight = height + scale8(sin8(wavePhase), waveHeight << 1) - waveHeight;
+
+      int8_t wave = scale8(sin8(wavePhase), waveHeight << 1) - waveHeight;
+
+      if (wave < 0 && abs8(wave) > height ) {
+        adjHeight = 0;
+      }
+      else {
+        adjHeight = height + wave;
+      }
+      
       wavePhase += waveFreq;
     }
     else {
@@ -107,17 +116,19 @@ struct Accumulation {
     
     // new glint?
     if (glintValue == 0 && pileEnd >= MIN_LEDS_FOR_GLINT) {
-      if (random8(0, 100) < config->glintChance) {
+      if (random8(0, 100) > (100 - config->glintChance)) {
         glintValue = 255;
-        glintPixel = random8(0, pileEnd);
+        glintPixel = (glintPixel + random8(1, pileEnd - 1)) % pileEnd;
       }
     }
     
     if (glintValue > 0) {
 
-      leds[glintPixel] += CRGB(scale8_video(config->glintColour.r, glintValue),
-                               scale8_video(config->glintColour.g, glintValue), 
-                               scale8_video(config->glintColour.b, glintValue));
+      uint8_t glintBrightness = pow8(sin8(glintValue), 10);
+      
+      leds[glintPixel] += CRGB(scale8_video(config->glintColour.r, glintBrightness),
+                               scale8_video(config->glintColour.g, glintBrightness), 
+                               scale8_video(config->glintColour.b, glintBrightness));
 
       glintValue = qsub8(glintValue, config->glintStep);
     }

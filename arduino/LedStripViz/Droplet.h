@@ -16,7 +16,7 @@ class Droplet {
   bool isSplashing;
   bool isActive;
     
-  uint8_t pow8(uint8_t n, uint8_t e);
+  //uint8_t pow8(uint8_t n, uint8_t e);
   
 public:
 
