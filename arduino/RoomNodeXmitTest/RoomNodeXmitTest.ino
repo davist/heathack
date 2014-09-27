@@ -21,7 +21,7 @@
 // #define SHT11_PORT  1   // defined if SHT11 is connected to a port
 #define HYT131_PORT 1   // defined if HYT131 is connected to a port
 #define LDR_PORT    4   // defined if LDR is connected to a port's AIO pin
-#define PIR_PORT    4   // defined if PIR is connected to a port's DIO pin
+//#define PIR_PORT    4   // defined if PIR is connected to a port's DIO pin
 
 #define MEASURE_PERIOD  10 // how often to measure, in tenths of seconds
 #define RETRY_PERIOD    10  // how soon to retry if ACK didn't come in
@@ -182,9 +182,11 @@ static void doMeasure() {
     
     payload.addReading(SENSOR_LIGHT, HHSensorType::LIGHT, light*10);
 
+#if PIR_PORT
     if (pir.triggered()) {
       payload.addReading(SENSOR_MOTION, HHSensorType::MOTION, 10);
     }
+#endif
 }
 
 static void serialFlush () {
