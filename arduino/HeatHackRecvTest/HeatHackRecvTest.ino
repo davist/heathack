@@ -81,6 +81,7 @@ void loop() {
     
     // send ack if required
     if(RF12_WANTS_ACK){
+      Serial.println("sending ack");
       rf12_sendStart(RF12_ACK_REPLY,0,0);
       rf12_sendWait(1);
     }    

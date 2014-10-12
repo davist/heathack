@@ -19,11 +19,11 @@
 #define DEBUG   0   // set to 1 to display each loop() run and PIR trigger
 
 // #define SHT11_PORT  1   // defined if SHT11 is connected to a port
-#define HYT131_PORT 1   // defined if HYT131 is connected to a port
-#define LDR_PORT    4   // defined if LDR is connected to a port's AIO pin
-//#define PIR_PORT    4   // defined if PIR is connected to a port's DIO pin
+#define HYT131_PORT 2   // defined if HYT131 is connected to a port
+#define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
+//#define PIR_PORT    3   // defined if PIR is connected to a port's DIO pin
 
-#define MEASURE_PERIOD  10 // how often to measure, in tenths of seconds
+#define MEASURE_PERIOD  600 // how often to measure, in tenths of seconds
 #define RETRY_PERIOD    10  // how soon to retry if ACK didn't come in
 #define RETRY_LIMIT     5   // maximum number of times to retry
 #define ACK_TIME        10  // number of milliseconds to wait for an ack
@@ -52,17 +52,6 @@ Scheduler scheduler (schedbuf, TASK_END);
 
 static byte reportCount;    // count up until next report, i.e. packet send
 static byte myNodeID;       // node ID used for this unit
-
-// This defines the structure of the packets which get sent out by wireless:
-/*
-struct {
-    byte light;     // light sensor: 0..255
-    byte moved :1;  // motion detector: 0..1
-    byte humi  :7;  // humidity: 0..100
-    int temp   :10; // temperature: -500..+500 (tenths)
-    byte lobat :1;  // supply voltage dropped under 3.1V: 0..1
-} payload;
-*/
 
 HeatHackData payload;
 
