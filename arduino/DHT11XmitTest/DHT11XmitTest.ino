@@ -2,15 +2,21 @@
 #include <avr/sleep.h>
 #include <util/atomic.h>
 #include <idDHT11.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include <HeatHack.h>
 
-//#define DEBUG 1
+#define DEBUG 1
 
 #define GROUP_ID 212
 #define NODE_ID 2
 
 #define DHT11_PIN PORT_IRQ_AS_DIO
 #define DHT11_INTERRUPT PORT_IRQ
+
+#define DS18B_DATA_PIN PORT4_DIO
+#define DS18B_POWER_PIN PORT4_AIO_AS_DIO
+
 
 #define SECS_BETWEEN_TRANSMITS 60
 #define SECS_BETWEEN_TRANSMITS_NO_ACK 600
@@ -34,11 +40,41 @@ void dht11_wrapper() {
   dht11.isrCallback();
 }
 
+#if DS18B_DATA_PIN
+
+  #define DS18B_PRECISION 9
+  #define REQUIRESALARMS false
+  
+  byte ds18bNumDevices;
+  DeviceAddress ds18bAddresses[3];
+  bool ds18bDeviceAvailable[3];
+  
+  // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
+  OneWire oneWire(DS18B_DATA_PIN);
+  
+  // Pass our oneWire reference to Dallas Temperature. 
+  DallasTemperature ds18bSensors(&oneWire);
+
+  void enableDS18B() {
+    digitalWrite(DS18B_POWER_PIN, HIGH);
+    delayMicroseconds(50);
+  }
+
+  void disableDS18B() {
+    digitalWrite(DS18B_POWER_PIN, LOW);
+  }
+
+
+#endif
+
 HeatHackData dataPacket;
 
 #define SENSOR_LOWBATT  1
 #define SENSOR_TEMP     2
 #define SENSOR_HUMIDITY 3
+#define SENSOR_LIGHT    4
+#define SENSOR_MOTION   5
+#define SENSOR_TEMP2    6
 
 // scheduler for timing periodic tasks
 enum { MEASURE, TASK_END };
@@ -154,6 +190,23 @@ void doMeasure() {
     dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, dht11.getHumidity() * 10);
   }
 
+#if DS18B_DATA_PIN
+
+  if (ds18bNumDevices > 0) {
+
+    enableDS18B();
+    ds18bSensors.requestTemperatures();
+    Sleepy::loseSomeTime(ds18bSensors.millisToWaitForConversion(DS18B_PRECISION));
+
+    for (int i=0; i<3; i++) {
+      if (ds18bDeviceAvailable[i]) {    
+        int tempC = ds18bSensors.getTempC(ds18bAddresses[i]) * 10;
+        dataPacket.addReading(SENSOR_TEMP2 + i, HHSensorType::TEMPERATURE, tempC);
+      }
+    }
+    disableDS18B();
+  }
+#endif
 }
 
 
@@ -174,6 +227,52 @@ void setup() {
   Serial.println(NODE_ID);
   serialFlush();
 #endif
+
+
+  #if DS18B_DATA_PIN
+  pinMode(DS18B_POWER_PIN, OUTPUT);
+
+  enableDS18B();
+
+  ds18bSensors.begin();
+  ds18bSensors.setWaitForConversion(false);
+  
+  // Grab a count of devices on the wire
+  ds18bNumDevices = ds18bSensors.getDeviceCount();
+
+  #if DEBUG
+    Serial.print("DS18B count: ");
+    Serial.println(ds18bNumDevices);
+  #endif
+
+  // can only handle 3 max
+  if (ds18bNumDevices > 3) ds18bNumDevices = 3;
+
+  if (ds18bNumDevices > 0) {
+    for (byte i=0; i<ds18bNumDevices; i++) {
+      if (ds18bSensors.getAddress(ds18bAddresses[i], i)) {
+        ds18bDeviceAvailable[i] = true;
+        ds18bSensors.setResolution(ds18bAddresses[i], DS18B_PRECISION);
+
+        #if DEBUG
+          Serial.print(" device ");
+          Serial.print(i);
+          Serial.print(", address ");
+          Serial.print(ds18bAddresses[i][0], HEX);
+          Serial.print(ds18bAddresses[i][1], HEX);
+          Serial.print(ds18bAddresses[i][2], HEX);
+          Serial.println(ds18bAddresses[i][3], HEX);
+        #endif
+      }
+      else {
+        ds18bDeviceAvailable[i] = false;
+      }
+    }
+  }
+
+  disableDS18B();
+  
+  #endif
 
   // initialise transmitter
   myNodeID = rf12_initialize(NODE_ID, RF12_868MHZ, GROUP_ID);

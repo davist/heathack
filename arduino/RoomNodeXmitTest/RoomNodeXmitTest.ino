@@ -13,6 +13,8 @@
 #include <PortsSHT11.h>
 #include <avr/sleep.h>
 #include <util/atomic.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include <HeatHack.h>
 
 #define SERIAL  0   // set to 1 to also report readings on the serial port
@@ -22,6 +24,9 @@
 #define HYT131_PORT 2   // defined if HYT131 is connected to a port
 #define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
 //#define PIR_PORT    3   // defined if PIR is connected to a port's DIO pin
+
+#define DS18B_PORT PORT1_DIO
+
 
 #define MEASURE_PERIOD  600 // how often to measure, in tenths of seconds
 #define RETRY_PERIOD    10  // how soon to retry if ACK didn't come in
@@ -40,6 +45,7 @@
 #define SENSOR_HUMIDITY 3
 #define SENSOR_LIGHT    4
 #define SENSOR_MOTION   5
+#define SENSOR_TEMP2    6
 
 // The scheduler makes it easy to perform various tasks at various times:
 
@@ -121,6 +127,23 @@ HeatHackData payload;
     ISR(PCINT2_vect) { pir.poll(); }
 #endif
 
+#if DS18B_PORT
+
+#define DS18B_PRECISION 9
+#define REQUIRESALARMS false
+
+byte ds18bNumDevices;
+DeviceAddress ds18bAddresses[3];
+bool ds18bDeviceAvailable[3];
+
+// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
+OneWire oneWire(DS18B_PORT);
+
+// Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature ds18bSensors(&oneWire);
+
+#endif
+
 // has to be defined because we're using the watchdog for low-power waiting
 ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 
@@ -174,6 +197,22 @@ static void doMeasure() {
 #if PIR_PORT
     if (pir.triggered()) {
       payload.addReading(SENSOR_MOTION, HHSensorType::MOTION, 10);
+    }
+#endif
+
+#if DS18B_PORT
+
+    if (ds18bNumDevices > 0) {
+
+      ds18bSensors.requestTemperatures();
+      Sleepy::loseSomeTime(ds18bSensors.millisToWaitForConversion(DS18B_PRECISION));
+
+      for (int i=0; i<3; i++) {
+        if (ds18bDeviceAvailable[i]) {    
+          int tempC = ds18bSensors.getTempC(ds18bAddresses[i]) * 10;
+          payload.addReading(SENSOR_TEMP2 + i, HHSensorType::TEMPERATURE, tempC);
+        }
+      }      
     }
 #endif
 }
@@ -258,12 +297,50 @@ void setup () {
     
     #if PIR_PORT
         pir.digiWrite(PIR_PULLUP);
-#ifdef PCMSK2
-        bitSet(PCMSK2, PIR_PORT + 3);
-        bitSet(PCICR, PCIE2);
-#else
-        //XXX TINY!
-#endif
+        #ifdef PCMSK2
+          bitSet(PCMSK2, PIR_PORT + 3);
+          bitSet(PCICR, PCIE2);
+        #else
+          //XXX TINY!
+        #endif
+    #endif
+
+    #if DS18B_PORT
+    ds18bSensors.begin();
+    ds18bSensors.setWaitForConversion(false);
+    
+    // Grab a count of devices on the wire
+    ds18bNumDevices = ds18bSensors.getDeviceCount();
+  
+    #if DEBUG
+      Serial.print("DS18B count: ");
+      Serial.println(ds18bNumDevices);
+    #endif
+  
+    // can only handle 3 max
+    if (ds18bNumDevices > 3) ds18bNumDevices = 3;
+  
+    if (ds18bNumDevices > 0) {
+      for (byte i=0; i<ds18bNumDevices; i++) {
+        if (ds18bSensors.getAddress(ds18bAddresses[i], i)) {
+          ds18bDeviceAvailable[i] = true;
+          ds18bSensors.setResolution(ds18bAddresses[i], DS18B_PRECISION);
+
+          #if DEBUG
+            Serial.print(" device ");
+            Serial.print(i);
+            Serial.print(", address ");
+            Serial.print(ds18bAddresses[i][0], HEX);
+            Serial.print(ds18bAddresses[i][1], HEX);
+            Serial.print(ds18bAddresses[i][2], HEX);
+            Serial.println(ds18bAddresses[i][3], HEX);
+          #endif
+        }
+        else {
+          ds18bDeviceAvailable[i] = false;
+        }
+      }
+    }    
     #endif
 
     reportCount = REPORT_EVERY;     // report right away for easy debugging
