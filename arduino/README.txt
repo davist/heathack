@@ -16,3 +16,7 @@ http://jeelabs.net/pub/docs/jeelib/classSleepy.html
 
 JeeMon
 http://jeelabs.org/2010/05/13/setting-up-jeemon/
+
+JeeNode Micro
+https://github.com/jcw/ide-hardware
+and also install WinAVR: http://jeelabs.net/projects/hardware/wiki/JeeNode_Micro

@@ -1,6 +1,9 @@
 <?php
 
-// names and ranges for sensor types in numerial order from zero
+// API key for EmonCMS
+$API_KEY = "ee64225c5bb56a053222f8d33f153084";
+
+// names and ranges for sensor types in numerial order from zero.
 // min and max = 0 means allow all values
 $sensorTypes = array(
     array("name" => "undefined",   "min" => 0,   "max" => 0),
@@ -12,8 +15,6 @@ $sensorTypes = array(
     array("name" => "sound",       "min" => 0,   "max" => 0),
     array("name" => "lowbatt",     "min" => 0,   "max" => 0),
 );
-
-$API_KEY = "ee64225c5bb56a053222f8d33f153084";
 
 // open serial port
 $fp =fopen("/dev/ttyUSB0", "r");

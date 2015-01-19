@@ -6,17 +6,21 @@
 #include <DallasTemperature.h>
 #include <HeatHack.h>
 
-#define DEBUG 1
+//#define DEBUG 1
 
 #define GROUP_ID 212
-#define NODE_ID 2
+#define NODE_ID 4
 
 #define DHT11_PIN PORT_IRQ_AS_DIO
 #define DHT11_INTERRUPT PORT_IRQ
 
-#define DS18B_DATA_PIN PORT4_DIO
-#define DS18B_POWER_PIN PORT4_AIO_AS_DIO
-
+#if defined(__AVR_ATtiny84__) // JNmicro
+  #define DS18B_DATA_PIN PORT1_DIO
+  #define DS18B_POWER_PIN PORT1_AIO_AS_DIO
+#else
+  #define DS18B_DATA_PIN PORT4_DIO
+  #define DS18B_POWER_PIN PORT4_AIO_AS_DIO
+#endif
 
 #define SECS_BETWEEN_TRANSMITS 60
 #define SECS_BETWEEN_TRANSMITS_NO_ACK 600
@@ -176,6 +180,9 @@ void doMeasure() {
   if (rf12_lowbat()) {
     dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 10);
   }
+  else {
+    dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 0);
+  }
 
   dht11.acquire();
 
@@ -214,7 +221,7 @@ void doMeasure() {
 void setup() {
 
   // wait for things to stablise
-  delay(100);
+  delay(1000);
   
 #ifdef DEBUG  
   Serial.begin(57600);
@@ -228,6 +235,20 @@ void setup() {
   serialFlush();
 #endif
 
+  cli();
+  CLKPR = bit(CLKPCE);
+#if defined(__AVR_ATtiny84__) // JNmicro
+  CLKPR = 0; // div 1, i.e. speed up to 8 MHz
+#else
+  CLKPR = 1; // div 2, i.e. slow down to 8 MHz
+#endif
+  sei();
+
+#if defined(__AVR_ATtiny84__)
+  // power up the radio on JeenodeMicro v3
+  bitSet(DDRB, 0);
+  bitClear(PORTB, 0);
+#endif
 
   #if DS18B_DATA_PIN
   pinMode(DS18B_POWER_PIN, OUTPUT);
@@ -276,6 +297,8 @@ void setup() {
 
   // initialise transmitter
   myNodeID = rf12_initialize(NODE_ID, RF12_868MHZ, GROUP_ID);
+  rf12_control(0xC040); // set low-battery level to 2.2V instead of 3.1V
+
   // power down
   rf12_sleep(RF12_SLEEP);
 

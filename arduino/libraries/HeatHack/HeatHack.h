@@ -19,24 +19,22 @@
 
 #elif defined(__AVR_ATtiny84__)
 
+// JeeNode Micro - only 2 ports
+
 #define PORT1_DIO 10
 #define PORT2_DIO 8
-#define PORT3_DIO 6
-#define PORT4_DIO 4
 
 #define PORT1_AIO_AS_DIO 9
 #define PORT2_AIO_AS_DIO 7
-#define PORT3_AIO_AS_DIO 5
-#define PORT4_AIO_AS_DIO 3
 
 #define PORT1_AIO 9
 #define PORT2_AIO 7
-#define PORT3_AIO 5
-#define PORT4_AIO 3
 
 #define PORT_IRQ_AS_DIO 3
 
 #else
+
+// Standard JeeNode with 4 ports
 
 #define PORT1_DIO 4
 #define PORT2_DIO 5
@@ -54,9 +52,10 @@
 #define PORT4_AIO 3
 
 #define PORT_IRQ_AS_DIO 3
-#define PORT_IRQ 1
 
 #endif
+
+#define PORT_IRQ 1
 
 // sensor types
 namespace HHSensorType {
