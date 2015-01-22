@@ -9,11 +9,33 @@
 //#define DEBUG 1
 
 #define GROUP_ID 212
-#define NODE_ID 4
+#define NODE_ID 15
+
+/**
+ * Default setup is:
+ *
+ * - Room board on ports 2 and 3 with the PIR sensor pointing away from the other ports.
+ * With the writing on the room board the right way up, port 2 is on the left and port 3 on the right.
+ * This means the HYT131 temp/humidity sensor is on port 2, LDR light sensor on port 3 A pin and
+ * PIR motion sensor on port 3 D pin.
+ *
+ * - A OneWire bus on port 4 data pin supporting multiple DS18B temp sensors.
+ * If power is drawn from the A pin instead of +, then the sensors will only be powered
+ * when needed to avoid wasting power.
+ * Parasitic power mode is supported transparently.
+ *
+ * - DHT11 temp/humidty sensor on port 1 with its data line connected to the I pin. Note that I (interrupt)
+ * is shared across all ports. The interrupt pin is used instead of D to save power so the processor can
+ * sleep while waiting for the sensor to acquire a reading instead of continually polling it.
+ * It isn't possible to use the room board PIR and DHT simultaneously as they both use the interrupt.
+ *
+ * To enable/disable the various sensors depending on your setup, comment/uncomment the lines
+ * defining the port/pins for the relevant sensor.
+ */
 
 // dht11 temp/humidity
-#define DHT11_PIN PORT_IRQ_AS_DIO
-#define DHT11_INTERRUPT PORT_IRQ
+//#define DHT11_PIN PORT_IRQ_AS_DIO
+//#define DHT11_INTERRUPT PORT_IRQ
 
 // Dallas DS18B switchable parasitic power board
 #if defined(__AVR_ATtiny84__) // JNmicro
@@ -29,9 +51,13 @@
 #define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
 //#define PIR_PORT    3   // defined if PIR is connected to a port's DIO pin
 
-#define SECS_BETWEEN_TRANSMITS 60
-#define SECS_BETWEEN_TRANSMITS_NO_ACK 600
-#define MAX_SECS_WITHOUT_ACK 600
+
+// To avoid wasting power sending frequent readings when the receiver isn't contactable,
+// the node will switch to a less-frequent mode when it doesn't get acknowledgments from
+// the receiver. It will switch back to normal mode as soon as an ack is received.
+#define SECS_BETWEEN_TRANSMITS 60          // how frequently readings are sent normally, in seconds
+#define MAX_SECS_WITHOUT_ACK 600           // how long to go without an acknowledgement before switching to less-frequent mode
+#define SECS_BETWEEN_TRANSMITS_NO_ACK 600  // how often to send readings in the less-frequent mode
 
 #define ACK_TIME        10  // number of milliseconds to wait for an ack
 #define RETRY_PERIOD    1000  // how soon to retry if ACK didn't come in
@@ -43,13 +69,15 @@
 
 static byte myNodeID;       // node ID used for this unit
 
-void dht11_wrapper(); // must be declared before the lib initialization
-
-idDHT11 dht11(DHT11_PIN, DHT11_INTERRUPT, dht11_wrapper);
-
-void dht11_wrapper() {
-  dht11.isrCallback();
-}
+#if DHT11_PIN
+  void dht11_wrapper(); // must be declared before the lib initialization
+  
+  idDHT11 dht11(DHT11_PIN, DHT11_INTERRUPT, dht11_wrapper);
+  
+  void dht11_wrapper() {
+    dht11.isrCallback();
+  }
+#endif
 
 #if DS18B_DATA_PIN
 
@@ -74,8 +102,6 @@ void dht11_wrapper() {
   void disableDS18B() {
     digitalWrite(DS18B_POWER_PIN, LOW);
   }
-
-
 #endif
 
 #if HYT131_PORT
@@ -88,17 +114,18 @@ void dht11_wrapper() {
 #endif
 
 #if PIR_PORT
-    #define PIR_HOLD_TIME   30  // hold PIR value this many seconds after change
+    #define PIR_HOLD_TIME   10  // hold PIR value this many seconds after change
     #define PIR_PULLUP      1   // set to one to pull-up the PIR input pin
     #define PIR_INVERTED    1   // 0 or 1, to match PIR reporting high or low
     
     /// Interface to a Passive Infrared motion sensor.
     class PIR : public Port {
-        volatile byte value, changed;
+        volatile byte value;
+        volatile uint16_t count;
         volatile uint32_t lastOn;
     public:
         PIR (byte portnum)
-            : Port (portnum), value (0), changed (0), lastOn (0) {}
+            : Port (portnum), value (0), count (0), lastOn (0) {}
 
         // this code is called from the pin-change interrupt handler
         void poll() {
@@ -106,8 +133,7 @@ void dht11_wrapper() {
             byte pin = digiRead() ^ PIR_INVERTED;
             // if the pin just went on, then set the changed flag to report it
             if (pin) {
-                if (!state())
-                    changed = 1;
+                if (!state()) count++;
                 lastOn = millis();
             }
             value = pin;
@@ -116,19 +142,22 @@ void dht11_wrapper() {
         // state is true if curr value is still on or if it was on recently
         byte state() const {
             byte f = value;
-            if (lastOn > 0)
+            if (lastOn > 0) {
                 ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-                    if (millis() - lastOn < 1000 * PIR_HOLD_TIME)
+                    if (millis() - lastOn < PIR_HOLD_TIME * 1000) {
                         f = 1;
+                    }
                 }
+            }
+            
             return f;
         }
 
-        // return true if there is new motion to report
-        byte triggered() {
-            byte f = changed;
-            changed = 0;
-            return f;
+        // return number of motion triggers since last time the method was called
+        uint16_t triggerCount() {
+            uint16_t result = count;
+            count = 0;
+            return result;
         }
     };
 
@@ -196,7 +225,15 @@ static void doReport() {
           Serial.print(": ");
           Serial.print(HHSensorTypeNames[dataPacket.readings[i].sensorType]);
           Serial.print(" ");
-          Serial.println((float)(dataPacket.readings[i].reading / 10.0));
+          Serial.print(dataPacket.readings[i].getIntPartOfReading());
+          
+          uint8_t decimal = dataPacket.readings[i].getDecPartOfReading();        
+          if (decimal != NO_DECIMAL) {
+            // display as decimal value to 1 decimal place
+            Serial.print(".");
+            Serial.print(decimal);
+          }
+          Serial.println();        
         }
         serialFlush();
     #endif
@@ -242,13 +279,17 @@ static void doReport() {
 
 /////////////////////////////////////////////////////////////////////
 void doMeasure() {
+  static bool firstMeasure = true;
+  
   // format data packet
   dataPacket.clear();
 
   if (rf12_lowbat()) {
-    dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 10);
+    dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 1);
   }
-  else {
+  else if (firstMeasure) {
+    // send a reading first time even if battery isn't low so that the logger
+    // knows about the sensor and can graph it for when it does start reporting a low batt.
     dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 0);
   }
 
@@ -262,8 +303,8 @@ void doMeasure() {
   }
 
   if (dht11.getStatus() == IDDHTLIB_OK) {
-    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, dht11.getCelsius() * 10);
-    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, dht11.getHumidity() * 10);
+    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, dht11.getCelsius() * 10.0);
+    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, dht11.getHumidity() * 10.0);
   }
 #endif
 
@@ -277,7 +318,7 @@ void doMeasure() {
 
     for (int i=0; i<3; i++) {
       if (ds18bDeviceAvailable[i]) {    
-        int tempC = ds18bSensors.getTempC(ds18bAddresses[i]) * 10;
+        int16_t tempC = ds18bSensors.getTempC(ds18bAddresses[i]) * 10.0;
         dataPacket.addReading(SENSOR_TEMP2 + i, HHSensorType::TEMPERATURE, tempC);
       }
     }
@@ -289,8 +330,8 @@ void doMeasure() {
     int humi, temp;
     hyt131.reading(temp, humi);
 
-    payload.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
-    payload.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
+    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
+    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
 #endif
 
 #if LDR_PORT
@@ -298,15 +339,17 @@ void doMeasure() {
     byte light = ~ ldr.anaRead() >> 2;
     ldr.digiWrite2(0);  // disable pull-up to reduce current draw
     
-    payload.addReading(SENSOR_LIGHT, HHSensorType::LIGHT, light*10);
+    dataPacket.addReading(SENSOR_LIGHT, HHSensorType::LIGHT, light);
 #endif
 
 #if PIR_PORT
-    if (pir.triggered()) {
-      payload.addReading(SENSOR_MOTION, HHSensorType::MOTION, 10);
+    uint16_t count = pir.triggerCount();
+    if (count > 0) {
+      dataPacket.addReading(SENSOR_MOTION, HHSensorType::MOTION, count);
     }
 #endif
 
+  firstMeasure = false;
 }
 
 
@@ -317,9 +360,9 @@ void setup() {
   delay(1000);
   
 #ifdef DEBUG  
-  Serial.begin(57600);
+  Serial.begin(BAUD_RATE);
   
-  Serial.println("JeeNode DHT11 temp & humidity transmit test");
+  Serial.println("JeeNode HeatHack Environment Monitor");
 
   Serial.print("Using group id ");
   Serial.print(GROUP_ID);
@@ -328,14 +371,17 @@ void setup() {
   serialFlush();
 #endif
 
+/*
   cli();
   CLKPR = bit(CLKPCE);
 #if defined(__AVR_ATtiny84__) // JNmicro
   CLKPR = 0; // div 1, i.e. speed up to 8 MHz
 #else
+  // slowing clock is good for power saving, but messes up timers and serial baud rate!
   CLKPR = 1; // div 2, i.e. slow down to 8 MHz
 #endif
   sei();
+*/
 
 #if defined(__AVR_ATtiny84__)
   // power up the radio on JeenodeMicro v3
