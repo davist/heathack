@@ -47,6 +47,7 @@ void loop() {
       #if DEBUG
         Serial.print("Sent ack to node ");
         Serial.println(node);
+        Serial.println();
       #endif
     }
     
@@ -82,39 +83,40 @@ void loop() {
         Serial.print(" ");
       }
 
-      Serial.println();
- 
-      #if DEBUG    
-        Serial.print("\nData from node ");
-        Serial.print(node);
-        Serial.print(" seq ");
-        Serial.println(data->sequence);
-          
-        for (byte i=0; i<data->numReadings; i++) {
-          Serial.print("* sensor ");
-          Serial.print(data->readings[i].sensorNumber);
-          Serial.print(": ");
-          Serial.print(HHSensorTypeNames[data->readings[i].sensorType]);
-          Serial.print(" ");
-          Serial.print(data->readings[i].getIntPartOfReading());
-          
-          uint8_t decimal = data->readings[i].getDecPartOfReading();        
-          if (decimal != NO_DECIMAL) {
-            // display as decimal value to 1 decimal place
-            Serial.print(".");
-            Serial.print(decimal);
-          }
-          Serial.println();
-        }
-      #endif      
+      Serial.println(); 
     }
     else {
       #if DEBUG
-        Serial.print("Repeated sequence id ");
+        Serial.print("\n\rRepeated sequence id ");
         Serial.print(data->sequence);
         Serial.print(" from node ");
         Serial.println(node);
       #endif
     }
+
+    #if DEBUG    
+      Serial.print("\n\rData from node ");
+      Serial.print(node);
+      Serial.print(" seq ");
+      Serial.println(data->sequence);
+        
+      for (byte i=0; i<data->numReadings; i++) {
+        Serial.print("* sensor ");
+        Serial.print(data->readings[i].sensorNumber);
+        Serial.print(": ");
+        Serial.print(HHSensorTypeNames[data->readings[i].sensorType]);
+        Serial.print(" ");
+        Serial.print(data->readings[i].getIntPartOfReading());
+        
+        uint8_t decimal = data->readings[i].getDecPartOfReading();        
+        if (decimal != NO_DECIMAL) {
+          // display as decimal value to 1 decimal place
+          Serial.print(".");
+          Serial.print(decimal);
+        }
+        Serial.println();
+      }
+      Serial.println();
+    #endif      
   }
 }

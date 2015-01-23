@@ -1,10 +1,8 @@
 #include <JeeLib.h>
 #include <avr/sleep.h>
 #include <util/atomic.h>
-#include <idDHT11.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include <HeatHack.h>
+#include <HeatHackSensors.h>
 
 //#define DEBUG 1
 
@@ -24,20 +22,18 @@
  * when needed to avoid wasting power.
  * Parasitic power mode is supported transparently.
  *
- * - DHT11 temp/humidty sensor on port 1 with its data line connected to the I pin. Note that I (interrupt)
- * is shared across all ports. The interrupt pin is used instead of D to save power so the processor can
- * sleep while waiting for the sensor to acquire a reading instead of continually polling it.
- * It isn't possible to use the room board PIR and DHT simultaneously as they both use the interrupt.
+ * - DHT11/22 temp/humidty sensor on port 1 with its data line connected to the D pin.
  *
  * To enable/disable the various sensors depending on your setup, comment/uncomment the lines
  * defining the port/pins for the relevant sensor.
  */
 
-// dht11 temp/humidity
-//#define DHT11_PIN PORT_IRQ_AS_DIO
-//#define DHT11_INTERRUPT PORT_IRQ
+// dht11/22 temp/humidity
+#define DHT_PORT 1
+#define DHT_TYPE DHT11_TYPE
 
 // Dallas DS18B switchable parasitic power board
+/*
 #if defined(__AVR_ATtiny84__) // JNmicro
   #define DS18B_DATA_PIN PORT1_DIO
   #define DS18B_POWER_PIN PORT1_AIO_AS_DIO
@@ -45,10 +41,11 @@
   #define DS18B_DATA_PIN PORT4_DIO
   #define DS18B_POWER_PIN PORT4_AIO_AS_DIO
 #endif
+*/
 
 // room node module
-#define HYT131_PORT 2   // defined if HYT131 is connected to a port
-#define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
+//#define HYT131_PORT 2   // defined if HYT131 is connected to a port
+//#define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
 //#define PIR_PORT    3   // defined if PIR is connected to a port's DIO pin
 
 
@@ -59,7 +56,7 @@
 #define MAX_SECS_WITHOUT_ACK 600           // how long to go without an acknowledgement before switching to less-frequent mode
 #define SECS_BETWEEN_TRANSMITS_NO_ACK 600  // how often to send readings in the less-frequent mode
 
-#define ACK_TIME        10  // number of milliseconds to wait for an ack
+#define ACK_TIME        20  // number of milliseconds to wait for an ack
 #define RETRY_PERIOD    1000  // how soon to retry if ACK didn't come in
 #define RETRY_LIMIT     5   // maximum number of times to retry
 
@@ -69,17 +66,14 @@
 
 static byte myNodeID;       // node ID used for this unit
 
-#if DHT11_PIN
-  void dht11_wrapper(); // must be declared before the lib initialization
-  
-  idDHT11 dht11(DHT11_PIN, DHT11_INTERRUPT, dht11_wrapper);
-  
-  void dht11_wrapper() {
-    dht11.isrCallback();
-  }
+#if DHT_PORT
+  DHT dht(DHT_PORT, DHT_TYPE);
 #endif
 
 #if DS18B_DATA_PIN
+
+  #include <OneWire.h>
+  #include <DallasTemperature.h>
 
   #define DS18B_PRECISION 9
   #define REQUIRESALARMS false
@@ -280,6 +274,7 @@ static void doReport() {
 /////////////////////////////////////////////////////////////////////
 void doMeasure() {
   static bool firstMeasure = true;
+  int humi, temp;
   
   // format data packet
   dataPacket.clear();
@@ -293,18 +288,10 @@ void doMeasure() {
     dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 0);
   }
 
-#if DHT11_PIN
-  dht11.acquire();
-
-  while (dht11.acquiring()) {
-    // wait for interrupt
-    set_sleep_mode(SLEEP_MODE_IDLE);
-    sleep_mode();
-  }
-
-  if (dht11.getStatus() == IDDHTLIB_OK) {
-    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, dht11.getCelsius() * 10.0);
-    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, dht11.getHumidity() * 10.0);
+#if DHT_PORT
+  if (dht.reading(temp, humi)) {
+    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
+    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
   }
 #endif
 
@@ -327,9 +314,7 @@ void doMeasure() {
 #endif
 
 #if HYT131_PORT
-    int humi, temp;
     hyt131.reading(temp, humi);
-
     dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
     dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
 #endif
