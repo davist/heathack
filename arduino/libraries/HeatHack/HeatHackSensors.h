@@ -1,7 +1,8 @@
 #ifndef HEATHACK_SENSORS_H
 #define HEATHACK_SENSORS_H
 
-#include <jeelib,h>
+#include <jeelib.h>
+#include <avr/sleep.h>
 
 // time in microseconds to wait after turning on sensor power
 #define DS18_POWERUP_TIME 50 
@@ -13,45 +14,90 @@
 // Assumption here is that the tiny84 (JNMicro) is at 8MHz, otherwise 16MHz.
 #if defined(__AVR_ATtiny84__)
 	#define DHT_MAX_TIMER 16
-	#define DHT_LONG_PULSE 5
+	#define DHT_LONG_PULSE_CYCLES 5
 #else
 	#define DHT_MAX_TIMER 32
-	#define DHT_LONG_PULSE 9
+	#define DHT_LONG_PULSE_CYCLES 9
 #endif
 
-/* Interface for the DHT11 and DHT22 sensors, does not use floating point.
- * Based on Jeelib's DHTxx class.
+#define DHT_MAX_MICROSECS 255
+#define DHT_LONG_PULSE_MICROSECS 90
+
+/**********************************************************************************
+ * Interface for the DHT11 and DHT22 sensors.
+ * Does not use floating point, therefore results are returned in tenths of a unit,
+ * e.g. 25.4 is returned as 254.
  *
- * Sensor's data line is connected to D pin.
+ * Based on Jeelib's DHTxx class for the poll-based read and conversion of raw data to results,
+ * and idDHT11 for the interrupt-based read.
+ *
+ * Sensor's data line should be connected to the D  pin. Reading the data can be interrupt-driven
+ * or polled. Interrupt is preferred as it will be lower powered, but could cause problems if other
+ * interrupt-driven devices are also in use (eg PIR motion sensor).
+ * 
  * If sensor's power is connected to A instead of +, it will only be turned on
  * when taking a reading to save power.
  *
+ * So, ideal setup for connecting the sensor to the JeeNode port is:
+ *  sensor  port
+ *  GND/-   G
+ *  VCC/+   A
+ *  DATA    D
+ * 
+ * If using interrupts the line: ISR(PCINT2_vect) { DHT::isrCallback(); }
+ * must be included in the main sketch.
  * Sleepy is used for delays, therefore ISR(WDT_vect) { Sleepy::watchdogEvent(); }
- * must be included in the main sketch
+ * must also be included in the main sketch.
  */
 class DHT : public Port {
   byte type;
-  byte data[5]; // holds the 5 payload bytes
+  bool useInterrupts;
+  
+  // Note that variables used for interrupt-based capture are declared static
+  // so that the interrupt handler can access them.
+  
+  volatile static uint8_t data[5]; // holds the raw data
+  volatile static uint8_t currentBit;
+	
+  // used specifically during interrupt-based capture
+  volatile static uint32_t pulseStartTime;
+  volatile static bool acquiring;
+  volatile static bool acquiredSuccessfully;
+  volatile static uint8_t dataPin;
   
 public:
   /**
    * portNum: 1, 2, 3 or 4
    * sensorType: DHT11_TYPE or DHT22_TYPE
+   * useInterrupts: true - reading data done via interrupts to save power.
+   *   false - a busy loop used to read the signal.
    */
-  DHT (byte portNum, byte sensorType)
-	: Port(portNum), type(sensorType) {
+  DHT (byte portNum, byte sensorType, bool useInterrupts)
+	: Port(portNum), type(sensorType), useInterrupts(useInterrupts) {
   }
   
   // Results are returned in tenths of a degree and percent, respectively.
   // i.e 25.4 is returned as 254.
   bool reading (int& temp, int& humi) {
 
-	data[0] = data[1] = data[2] = data[3] = data[4] = 0;
-  
 	enablePower();	
-	initiateReading();
 
-	bool success = readRawData();
+	bool success;
+
+	success = initiateReading();
+
+	if (!success) Serial.println("initiateReading failed");
+
+	if (success) {
+		if (useInterrupts) {
+			success = readRawDataWithInterrupts();
+		}
+		else {
+			success = readRawDataWithPolling();
+		}
+
+		if (!success) Serial.println("readRawData failed");
+	}
 	
 	disablePower();
 
@@ -65,11 +111,44 @@ public:
 	Serial.print(data[3]);
 	Serial.print(" ");
 	Serial.println(data[4]);
-	
+ 	
 	if (success) {
 		success = computeResults(temp, humi);
 	}
 	return success;
+  }
+  
+  // the interrupt handler
+  static void isrCallback() {
+	// only interested in the falling edge
+	if (digitalRead(dataPin) != LOW) return;
+  
+	uint32_t pulseEndTime = micros();
+	unsigned int delta = (pulseEndTime - pulseStartTime);
+	pulseStartTime = pulseEndTime;
+
+	if (delta > DHT_MAX_MICROSECS) {
+		acquiring = false;
+		return;
+	}
+
+	// ignore first 'bit' as it's really a sync pulse
+	if (currentBit >= 1 ) {
+
+		// collect each bit in the data buffer
+		byte offset = (currentBit-1) >> 3; // divide by 8
+		data[offset] <<= 1;  // shift existing bits left to make way for next one
+		
+		// short pulse is a 0, long pulse a 1
+		data[offset] |= (delta >= DHT_LONG_PULSE_MICROSECS);
+	}
+
+	currentBit++;
+	
+	if (currentBit == 41) {
+		acquiring = false;
+		acquiredSuccessfully = true;
+	}
   }
   
 private:
@@ -78,6 +157,9 @@ private:
   inline void enablePower(void) {
 	mode2(OUTPUT);
 	digiWrite2(HIGH);
+	
+	// Set data pin as an output initially for signalling sensor to take a reading.
+	// Start with output high.
 	mode(OUTPUT);
 	digiWrite(HIGH);
 	
@@ -86,39 +168,83 @@ private:
   }
   
   inline void disablePower(void) {
+	// turn off pullup resistor to save power
+	mode(INPUT);
+	
+	// turn off A pin
 	digiWrite2(LOW);
   }
   
-  inline void initiateReading(void) {
-	  // pull bus low for >18ms to send start signal to sensor
-	  // Sleepy uses watchdog timer, which has 16ms resolution
-	  digiWrite(LOW);
-	  Sleepy::loseSomeTime(32);
+  inline bool initiateReading(void) {
+	// pull bus low for >18ms to send start signal to sensor
+	// Sleepy uses watchdog timer, which has 16ms resolution
+	digiWrite(LOW);
+	Sleepy::loseSomeTime(32);
 
-	  // disable interrupts while receiving data
-	  cli();
-	  
-	  // set bus back to high to indicate we're ready to receive the result
-	  digiWrite(HIGH);
-	  
-	  // sensor starts its response by pulling bus low within 40us
-	  // want to wait for it to have gone low before starting the reading
-	  delayMicroseconds(40);
-	  mode(INPUT);
-  }
-  
-  inline bool readRawData(void) {
-  
+	// set bus back to high to indicate we're ready to receive the result
+	digiWrite(HIGH);
+
+	// sensor starts its response by pulling bus low within 40us
+	// want to wait for it to have gone low before starting the reading
+	delayMicroseconds(40);
+	
+	// enable pullup resistor for the input in case no sensor's connected -
+	// it will be easier to detect an unchanging input if it's pulled up
+	// rather than floating.
+	mode(INPUT_PULLUP);
+
 	// sensor should have pulled line low by now
 	if (digiRead() != LOW) {
 		// looks like sensor's not responding
 		return false;
 	}
+
+	return true;
+  }
+
+  inline bool readRawDataWithInterrupts(void) {
+	bool result = true;
+
+	set_sleep_mode(SLEEP_MODE_IDLE);
+	sleep_enable();
+
+	acquiring = true;
+	acquiredSuccessfully = false;
+	currentBit = 0;
+	dataPin = digiPin();
+	pulseStartTime = micros();
+
+	// enable interrupt
+	#ifdef PCMSK2
+		bitSet(PCMSK2, digiPin());
+		bitSet(PCICR, PCIE2);
+	#endif
+	
+	do {
+		// wait for interrupt
+		sleep_cpu();
+	} while (acquiring);
+
+	sleep_disable();
+
+	// disable interrupt
+	#ifdef PCMSK2
+		bitClear(PCICR, PCIE2);
+		bitClear(PCMSK2, digiPin());
+	#endif
+	
+	return acquiredSuccessfully;
+  }
+  
+  inline bool readRawDataWithPolling(void) {
   
 	bool result = true;
 	
+	// disable interrupts while receiving data
+	cli();
+
 	// each bit is a high edge followed by a variable length low edge
-	for (byte bit = 0; bit < 41; bit++) {
+	for (byte currentBit = 0; currentBit < 41; currentBit++) {
 
 		// wait for the high edge, then measure time until the low edge
 		byte timer;
@@ -140,18 +266,18 @@ private:
 		}
 		
 		// ignore first 'bit' as it's really a sync pulse
-		if (bit >= 1 ) {
+		if (currentBit >= 1 ) {
 
 			// collect each bit in the data buffer
-			byte offset = (bit-1) >> 3; // divide by 8
+			byte offset = (currentBit-1) >> 3; // divide by 8
 			data[offset] <<= 1;  // shift existing bits left to make way for next one
 			
 			// short pulse is a 0, long pulse a 1
-			data[offset] |= (timer >= DHT_LONG_PULSE);
+			data[offset] |= (timer >= DHT_LONG_PULSE_CYCLES);
 		}
 	}
 
-	// re-enable interrupts asap
+	// re-enable interrupts
 	sei();
 
 	return result;
@@ -183,6 +309,12 @@ private:
   }
 };
 
+volatile uint8_t DHT::data[5]; // holds the raw data
+volatile uint8_t DHT::currentBit;
+volatile uint32_t DHT::pulseStartTime;
+volatile bool DHT::acquiring;
+volatile bool DHT::acquiredSuccessfully;
+volatile uint8_t DHT::dataPin;
 
 
 

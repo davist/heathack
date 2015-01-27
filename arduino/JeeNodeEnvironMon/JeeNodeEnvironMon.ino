@@ -4,10 +4,10 @@
 #include <HeatHack.h>
 #include <HeatHackSensors.h>
 
-//#define DEBUG 1
+#define DEBUG 1
 
 #define GROUP_ID 212
-#define NODE_ID 2
+#define NODE_ID 15
 
 /**
  * Default setup is:
@@ -29,7 +29,7 @@
  */
 
 // dht11/22 temp/humidity
-#define DHT_PORT 1
+//#define DHT_PORT 1
 #define DHT_TYPE DHT11_TYPE
 
 // Dallas DS18B switchable parasitic power board
@@ -37,9 +37,9 @@
 #define DS18B_POWER_PIN PORT4_AIO_AS_DIO
 
 // room node module
-//#define HYT131_PORT 2   // defined if HYT131 is connected to a port
-//#define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
-//#define PIR_PORT    3   // defined if PIR is connected to a port's DIO pin
+#define HYT131_PORT 2   // defined if HYT131 is connected to a port
+#define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
+#define PIR_PORT    3   // defined if PIR is connected to a port's DIO pin
 
 
 // To avoid wasting power sending frequent readings when the receiver isn't contactable,
@@ -60,7 +60,8 @@
 static byte myNodeID;       // node ID used for this unit
 
 #if DHT_PORT
-  DHT dht(DHT_PORT, DHT_TYPE);
+  DHT dht(DHT_PORT, DHT_TYPE, true);
+  ISR(PCINT2_vect) { DHT::isrCallback(); }
 #endif
 
 #if DS18B_DATA_PIN
@@ -451,12 +452,6 @@ void setup() {
 
 /////////////////////////////////////////////////////////////////////
 void loop() {
-  
-    #if DEBUG
-      Serial.print("loop: millis = ");
-      Serial.println(millis());
-      serialFlush();
-    #endif
   
     #if PIR_PORT
       static bool pirStarted = false;
