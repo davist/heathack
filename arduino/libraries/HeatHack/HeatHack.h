@@ -8,7 +8,12 @@
 #endif
 
 // The serial port baud rate to use for all HeatHack devices
-#define BAUD_RATE 57600
+#if defined(__AVR_ATtiny84__)
+	// JNMicro only supports 9600, 38400, or 115200
+	#define BAUD_RATE 38400
+#else
+	#define BAUD_RATE 57600
+#endif
 
 /**
  * Pin numbers for the JeeNode ports

@@ -377,8 +377,10 @@ public:
     char poll();
     /// same as poll, but wait for event in power-down mode.
     /// Uses Sleepy::loseSomeTime() - see comments there re requiring the
-    /// watchdog timer. 
-    char pollWaiting();
+    /// watchdog timer.
+	/// exitOnInterrupt - true - method will return if an interrupt causes
+	/// loseSomeTime to wake up early. false - goes back to sleep after the interrupt.
+    char pollWaiting(bool exitOnInterrupt);
     
     /// set a task timer, in tenths of seconds
     void timer(byte task, word tenths);

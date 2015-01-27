@@ -18,5 +18,6 @@ JeeMon
 http://jeelabs.org/2010/05/13/setting-up-jeemon/
 
 JeeNode Micro
-https://github.com/jcw/ide-hardware
+Arduino IDE v1.5
+add hardware profile for Micro: https://github.com/jcw/ide-hardware
 and also install WinAVR: http://jeelabs.net/projects/hardware/wiki/JeeNode_Micro

@@ -1,6 +1,5 @@
 #include <JeeLib.h>
 #include <avr/sleep.h>
-#include <util/atomic.h>
 #include <HeatHack.h>
 #include <HeatHackSensors.h>
 
@@ -12,20 +11,10 @@
 /**
  * Default setup is:
  *
- * - Room board on ports 2 and 3 with the PIR sensor pointing away from the other ports.
- * With the writing on the room board the right way up, port 2 is on the left and port 3 on the right.
- * This means the HYT131 temp/humidity sensor is on port 2, LDR light sensor on port 3 A pin and
- * PIR motion sensor on port 3 D pin.
- *
- * - A OneWire bus on port 4 data pin supporting multiple DS18B temp sensors.
- * If power is drawn from the A pin instead of +, then the sensors will only be powered
- * when needed to avoid wasting power.
- * Parasitic power mode is supported transparently.
- *
  * - DHT11/22 temp/humidty sensor on port 1 with its data line connected to the D pin.
  *
- * To enable/disable the various sensors depending on your setup, comment/uncomment the lines
- * defining the port/pins for the relevant sensor.
+ * Intention is to have both DHT and DS18 on port 1 with DHT's data on I and DS's on D
+ * and the A pin providing switchable power for both.
  */
 
 // dht11/22 temp/humidity
@@ -33,19 +22,15 @@
 #define DHT_TYPE DHT11_TYPE
 
 // Dallas DS18B switchable parasitic power board
-#define DS18B_DATA_PIN PORT4_DIO
-#define DS18B_POWER_PIN PORT4_AIO_AS_DIO
-
-// room node module
-//#define HYT131_PORT 2   // defined if HYT131 is connected to a port
-//#define LDR_PORT    3   // defined if LDR is connected to a port's AIO pin
-//#define PIR_PORT    3   // defined if PIR is connected to a port's DIO pin
-
+/*
+#define DS18B_DATA_PIN PORT1_DIO
+#define DS18B_POWER_PIN PORT1_AIO_AS_DIO
+*/
 
 // To avoid wasting power sending frequent readings when the receiver isn't contactable,
 // the node will switch to a less-frequent mode when it doesn't get acknowledgments from
 // the receiver. It will switch back to normal mode as soon as an ack is received.
-#define SECS_BETWEEN_TRANSMITS 60          // how frequently readings are sent normally, in seconds
+#define SECS_BETWEEN_TRANSMITS 10          // how frequently readings are sent normally, in seconds
 #define MAX_SECS_WITHOUT_ACK 600           // how long to go without an acknowledgement before switching to less-frequent mode
 #define SECS_BETWEEN_TRANSMITS_NO_ACK 600  // how often to send readings in the less-frequent mode
 
@@ -91,100 +76,11 @@ static byte myNodeID;       // node ID used for this unit
   }
 #endif
 
-#if HYT131_PORT
-    PortI2C hyti2cport (HYT131_PORT);
-    HYT131 hyt131 (hyti2cport);
-#endif
-
-#if LDR_PORT
-    Port ldr (LDR_PORT);
-#endif
-
-#if PIR_PORT
-    #define PIR_HOLD_TIME    1  // hold PIR value this many seconds after change
-    #define PIR_PULLUP       1   // set to one to pull-up the PIR input pin
-    #define PIR_INVERTED     1   // 0 or 1, to match PIR reporting high or low
-    #define PIR_STARTUP_SECS 120 // wait this many secs before enabling interrupt to
-                                 // avoid spurious triggers while device is stabilising
-    
-    /// Interface to a Passive Infrared motion sensor.
-    class PIR : public Port {
-        volatile byte value;
-        volatile uint16_t count;
-        volatile uint32_t lastOn;
-    public:
-        PIR (byte portnum)
-            : Port (portnum), value (0), count (0), lastOn (0) {}
-
-        // this code is called from the pin-change interrupt handler
-        void poll(void) {
-            // see http://talk.jeelabs.net/topic/811#post-4734 for PIR_INVERTED
-            byte pin = digiRead() ^ PIR_INVERTED;
-            // if the pin just went on, then set the changed flag to report it
-            if (pin) {
-                if (!state()) count++;
-                lastOn = millis();
-            }
-            value = pin;
-        }
-
-        // state is true if curr value is still on or if it was on recently
-        byte state(void) const {
-            byte f = value;
-            if (lastOn > 0) {
-                ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-                    if (millis() - lastOn < PIR_HOLD_TIME * 1000) {
-                        f = 1;
-                    }
-                }
-            }
-            
-            return f;
-        }
-
-        // return number of motion triggers since last time the method was called
-        uint16_t triggerCount(void) {
-            uint16_t result = count;
-            count = 0;
-            return result;
-        }
-        
-        void enableInterrupt(void) {
-          #if DEBUG
-            Serial.println("enabling PIR interrupts");
-            serialFlush();
-          #endif
-          #ifdef PCMSK2
-            bitSet(PCMSK2, PIR_PORT + 3);
-            bitSet(PCICR, PCIE2);
-          #endif
-        }
-        
-        void disableInterrupt(void) {
-          #if DEBUG
-            Serial.println("disabling PIR interrupts");
-            serialFlush();
-          #endif
-          #ifdef PCMSK2
-            bitClear(PCICR, PCIE2);
-          #endif
-        }
-    };
-
-    PIR pir (PIR_PORT);
-
-    // the PIR signal comes in via a pin-change interrupt
-    ISR(PCINT2_vect) { pir.poll(); }
-#endif
-
-
 HeatHackData dataPacket;
 
 #define SENSOR_LOWBATT  1
 #define SENSOR_TEMP     2
 #define SENSOR_HUMIDITY 3
-#define SENSOR_LIGHT    4
-#define SENSOR_MOTION   5
 #define SENSOR_TEMP2    6
 
 // scheduler for timing periodic tasks
@@ -215,18 +111,19 @@ static byte waitForAck() {
 
 
 /////////////////////////////////////////////////////////////////////
+#if DEBUG
 static void serialFlush () {
     #if ARDUINO >= 100
         Serial.flush();
     #endif  
     delay(10); // make sure tx buf is empty before going back to sleep
 }
-
+#endif
 
 /////////////////////////////////////////////////////////////////////
 // periodic report, i.e. send out a packet and optionally report on serial port
 static void doReport() {
-    #ifdef DEBUG  
+    #if DEBUG  
         Serial.println("--------------------------");
 
         for (byte i=0; i<dataPacket.numReadings; i++) {
@@ -267,7 +164,7 @@ static void doReport() {
       rf12_sleep(RF12_SLEEP);
 
       if (acked) {
-        #if DEBUG  
+        #ifdef DEBUG  
             Serial.print(" ack ");
             Serial.println((int) i);
             serialFlush();
@@ -277,7 +174,7 @@ static void doReport() {
         break;        
       }
       else {
-        #if DEBUG  
+        #ifdef DEBUG  
             Serial.print(" no ack ");
             Serial.println((int) i);
             serialFlush();
@@ -329,24 +226,6 @@ void doMeasure() {
   }
 #endif
 
-#if HYT131_PORT
-    hyt131.reading(temp, humi);
-    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
-    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
-#endif
-
-#if LDR_PORT
-    ldr.digiWrite2(1);  // enable AIO pull-up
-    byte light = ~ ldr.anaRead() >> 2;
-    ldr.digiWrite2(0);  // disable pull-up to reduce current draw
-    
-    dataPacket.addReading(SENSOR_LIGHT, HHSensorType::LIGHT, light);
-#endif
-
-#if PIR_PORT
-    dataPacket.addReading(SENSOR_MOTION, HHSensorType::MOTION, pir.triggerCount());
-#endif
-
   firstMeasure = false;
 }
 
@@ -358,7 +237,7 @@ void setup() {
   delay(1000);
   
 #ifdef DEBUG  
-  Serial.begin(BAUD_RATE);
+  Serial.begin(115200);
   
   Serial.println("JeeNode HeatHack Environment Monitor");
 
@@ -372,24 +251,12 @@ void setup() {
 
   cli();
   CLKPR = bit(CLKPCE);
-#if defined(__AVR_ATtiny84__) // JNmicro
   CLKPR = 0; // div 1, i.e. speed up to 8 MHz
-#else
-  // slowing clock is good for power saving, but messes up timers and serial baud rate!
-//  CLKPR = 1; // div 2, i.e. slow down to 8 MHz
-#endif
   sei();
 
-
-#if defined(__AVR_ATtiny84__)
   // power up the radio on JeenodeMicro v3
   bitSet(DDRB, 0);
   bitClear(PORTB, 0);
-#endif
-
-  #if PIR_PORT
-    pir.digiWrite(PIR_PULLUP);
-  #endif
 
   #if DS18B_DATA_PIN
   pinMode(DS18B_POWER_PIN, OUTPUT);
@@ -424,7 +291,6 @@ void setup() {
           Serial.print(ds18bAddresses[i][1], HEX);
           Serial.print(ds18bAddresses[i][2], HEX);
           Serial.println(ds18bAddresses[i][3], HEX);
-          serialFlush();
         #endif
       }
       else {
@@ -452,27 +318,9 @@ void setup() {
 /////////////////////////////////////////////////////////////////////
 void loop() {
   
-    #if DEBUG
-      Serial.print("loop: millis = ");
-      Serial.println(millis());
-      serialFlush();
-    #endif
-  
-    #if PIR_PORT
-      static bool pirStarted = false;
-      if (pirStarted || millis() >  (1000L * PIR_STARTUP_SECS)) {
-        pirStarted = true;
-        pir.enableInterrupt();
-      }
-    #endif
-    
-    switch (scheduler.pollWaiting(false)) {
+    switch (scheduler.pollWaiting()) {
 
         case MEASURE:
-            #if PIR_PORT
-              // don't want interrupts from PIR upsetting things
-              if (pirStarted) pir.disableInterrupt();
-            #endif
             doMeasure();
             doReport();
 
@@ -480,7 +328,7 @@ void loop() {
             unsigned long secsSinceAck = (millis() - lastAckTime)/1000;
             
             if (secsSinceAck > MAX_SECS_WITHOUT_ACK) {
-              #if DEBUG
+              #ifdef DEBUG
                 Serial.print("No ack for ");
                 Serial.print(secsSinceAck);
                 Serial.print(" secs. Waiting ");
@@ -492,7 +340,7 @@ void loop() {
               scheduler.timer(MEASURE, SECS_BETWEEN_TRANSMITS_NO_ACK * 10);
             }
             else {
-              #if DEBUG
+              #ifdef DEBUG
                 Serial.print(SECS_BETWEEN_TRANSMITS);
                 Serial.println(" secs till next transmit.");
                 serialFlush();

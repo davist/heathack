@@ -1217,15 +1217,27 @@ char Scheduler::poll() {
     return -1;
 }
 
-char Scheduler::pollWaiting() {
+char Scheduler::pollWaiting(bool exitOnInterrupt = true) {
     if(remaining == ~0U)  // Nothing running!
         return -2;
     // first wait until the remaining time we need to wait is less than 0.1s
     while (remaining > 0) {
         word step = remaining > 600 ? 600 : remaining;
+		uint32_t start = millis();
         if (!Sleepy::loseSomeTime(100 * step)) // uses least amount of power
-            return -1;
-        remaining -= step;
+		{
+			// woke early due to some other interrupt
+			if (exitOnInterrupt) {
+				return -1;
+			}
+			else {
+				// remove elapsed time from remaining
+				remaining -= (millis() - start) / 100;
+			}
+		}
+		else {
+			remaining -= step;
+		}
     }
     // now lose some more time until that 0.1s mark
     if (!Sleepy::loseSomeTime(ms100.remaining()))
