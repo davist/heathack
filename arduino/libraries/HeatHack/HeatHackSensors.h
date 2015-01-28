@@ -215,7 +215,10 @@ private:
 	pulseStartTime = micros();
 
 	// enable interrupt
-	#ifdef PCMSK2
+	#if defined(__AVR_ATtiny84__)
+		bitSet(PCMSK0, portNum * 2 - 2); // port1 = PCINT0, port2 = PCINT2
+		bitSet(GIMSK, PCIE0);
+	#else
 		bitSet(PCMSK2, digiPin());
 		bitSet(PCICR, PCIE2);
 	#endif
@@ -228,7 +231,10 @@ private:
 	sleep_disable();
 
 	// disable interrupt
-	#ifdef PCMSK2
+	#if defined(__AVR_ATtiny84__)
+		bitClear(GIMSK, PCIE0);
+		bitClear(PCMSK0, portNum * 2 - 2); // port1 = PCINT0, port2 = PCINT2
+	#else
 		bitClear(PCICR, PCIE2);
 		bitClear(PCMSK2, digiPin());
 	#endif
