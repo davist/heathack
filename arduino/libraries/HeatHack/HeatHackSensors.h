@@ -1,7 +1,7 @@
 #ifndef HEATHACK_SENSORS_H
 #define HEATHACK_SENSORS_H
 
-#include <jeelib.h>
+#include <JeeLib.h>
 #include <avr/sleep.h>
 
 // time in microseconds to wait after turning on sensor power
