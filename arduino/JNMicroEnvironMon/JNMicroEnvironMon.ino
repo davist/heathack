@@ -45,7 +45,8 @@
 static byte myNodeID;       // node ID used for this unit
 
 #if DHT_PORT
-  DHT dht(DHT_PORT, DHT_TYPE);
+  DHT dht(DHT_PORT, DHT_TYPE, true);
+  ISR(PCINT0_vect) { DHT::isrCallback(); }
 #endif
 
 #if DS18B_DATA_PIN
@@ -318,7 +319,7 @@ void setup() {
 /////////////////////////////////////////////////////////////////////
 void loop() {
   
-    switch (scheduler.pollWaiting()) {
+    switch (scheduler.pollWaiting(false)) {
 
         case MEASURE:
             doMeasure();

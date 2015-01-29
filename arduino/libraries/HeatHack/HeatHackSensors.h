@@ -169,7 +169,11 @@ private:
   
   inline void disablePower(void) {
 	// turn off pullup resistor to save power
-	mode(INPUT);
+	#if defined(__AVR_ATtiny84__)
+		digiWrite(LOW);
+	#else
+		mode(INPUT);
+	#endif
 	
 	// turn off A pin
 	digiWrite2(LOW);
@@ -191,7 +195,13 @@ private:
 	// enable pullup resistor for the input in case no sensor's connected -
 	// it will be easier to detect an unchanging input if it's pulled up
 	// rather than floating.
-	mode(INPUT_PULLUP);
+	#if defined(__AVR_ATtiny84__)
+		// INPUT_PULLUP not supported yet in the libs
+		mode(INPUT);
+		digiWrite(HIGH);
+	#else
+		mode(INPUT_PULLUP);
+	#endif
 
 	// sensor should have pulled line low by now
 	if (digiRead() != LOW) {
