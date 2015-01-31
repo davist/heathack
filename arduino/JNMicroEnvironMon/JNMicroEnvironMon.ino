@@ -22,10 +22,10 @@
 #define DHT_TYPE DHT11_TYPE
 
 // Dallas DS18B switchable parasitic power board
-/*
+
 #define DS18B_DATA_PIN PORT1_DIO
 #define DS18B_POWER_PIN PORT1_AIO_AS_DIO
-*/
+
 
 // To avoid wasting power sending frequent readings when the receiver isn't contactable,
 // the node will switch to a less-frequent mode when it doesn't get acknowledgments from
@@ -45,8 +45,14 @@
 static byte myNodeID;       // node ID used for this unit
 
 #if DHT_PORT
-  DHT dht(DHT_PORT, DHT_TYPE, true);
-  ISR(PCINT0_vect) { DHT::isrCallback(); }
+  #define DHT_USE_INTERRUPTS false
+
+  DHT dht(DHT_PORT, DHT_TYPE);
+
+  #if DHT_USE_INTERRUPTS
+    ISR(PCINT0_vect) { DHT::isrCallback(); }
+  #endif
+
 #endif
 
 #if DS18B_DATA_PIN
@@ -56,6 +62,7 @@ static byte myNodeID;       // node ID used for this unit
 
   #define DS18B_PRECISION 9
   #define REQUIRESALARMS false
+//  #define DS18_REQUIRES_FLOAT false
   
   byte ds18bNumDevices;
   DeviceAddress ds18bAddresses[3];
@@ -219,7 +226,9 @@ void doMeasure() {
 
     for (int i=0; i<3; i++) {
       if (ds18bDeviceAvailable[i]) {    
-        int16_t tempC = ds18bSensors.getTempC(ds18bAddresses[i]) * 10.0;
+        int16_t tempRaw = ds18bSensors.getTemp(ds18bAddresses[i]);
+        int16_t tempC = (tempRaw >> 4) * 10; // convert from temp in 1/16ths degree to whole degrees * 10
+        if ((tempRaw & 0xF) != 0) tempC += 5; // 0.5 deg resolution, so 1/16ths will be 0 or 8 for 0.0 or 0.5
         dataPacket.addReading(SENSOR_TEMP2 + i, HHSensorType::TEMPERATURE, tempC);
       }
     }

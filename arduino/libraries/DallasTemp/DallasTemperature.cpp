@@ -390,6 +390,8 @@ bool DallasTemperature::requestTemperaturesByIndex(uint8_t deviceIndex)
     return requestTemperaturesByAddress(deviceAddress);
 }
 
+#if DS18_REQUIRES_FLOAT
+
 // Fetch temperature for device index
 float DallasTemperature::getTempCByIndex(uint8_t deviceIndex)
 {
@@ -407,6 +409,7 @@ float DallasTemperature::getTempFByIndex(uint8_t deviceIndex)
         return DEVICE_DISCONNECTED_F;
     return getTempF((uint8_t*)deviceAddress);
 }
+#endif
 
 // reads scratchpad and returns fixed-point temperature, scaling factor 2^-7
 int16_t DallasTemperature::calculateTemperature(const uint8_t* deviceAddress, uint8_t* scratchPad)
@@ -463,6 +466,8 @@ int16_t DallasTemperature::getTemp(const uint8_t* deviceAddress)
     return DEVICE_DISCONNECTED_RAW;
 }
 
+#if DS18_REQUIRES_FLOAT
+
 // returns temperature in degrees C or DEVICE_DISCONNECTED_C if the
 // device's scratch pad cannot be read successfully.
 // the numeric value of DEVICE_DISCONNECTED_C is defined in
@@ -482,6 +487,7 @@ float DallasTemperature::getTempF(const uint8_t* deviceAddress)
 {
     return rawToFahrenheit(getTemp(deviceAddress));
 }
+#endif
 
 // returns true if the bus requires parasite power
 bool DallasTemperature::isParasitePowerMode(void)
@@ -703,6 +709,7 @@ void DallasTemperature::defaultAlarmHandler(const uint8_t* deviceAddress)
 
 #endif
 
+#if DS18_REQUIRES_FLOAT
 // Convert float Celsius to Fahrenheit
 float DallasTemperature::toFahrenheit(float celsius)
 {
@@ -733,6 +740,7 @@ float DallasTemperature::rawToFahrenheit(int16_t raw)
     // F = (C*1.8)+32 = (RAW/128*1.8)+32 = (RAW*0.0140625)+32
     return ((float)raw * 0.0140625) + 32;
 }
+#endif
 
 #if REQUIRESNEW
 
