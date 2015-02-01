@@ -123,8 +123,8 @@ class OneWire
     uint8_t LastDeviceFlag;
 #endif
 
-  public:
-    OneWire( uint8_t pin);
+  public:  
+    void init( uint8_t pin);
 
     // Perform a 1-Wire reset cycle. Returns 1 if a device responds
     // with a presence pulse.  Returns 0 if there is no device or the

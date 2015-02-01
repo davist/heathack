@@ -1,10 +1,13 @@
 #include <JeeLib.h>
 #include <HeatHack.h>
 
- #define DEBUG 1
+#define DEBUG 1
 
 #define GROUP_ID 212
 #define NODE_ID 1
+
+// enable code in HeatHack lib that's just for decoding received packets
+#define RECEIVER_NODE
 
 // holds last seen sequence number for each node
 byte lastSequence[30];
