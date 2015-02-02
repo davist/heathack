@@ -1,13 +1,18 @@
 #include <JeeLib.h>
 #include <avr/sleep.h>
-#include <HeatHack.h>
-#include <HeatHackSensors.h>
-
-// why do I have to include OneWire ehere? Why doesn't the include in HHensors.h work?
-#include <OneWire.h>
-
 
 //#define DEBUG true
+
+// need to include OneWire here as it won't get picked up from inside HeatHackSensors.h
+#define ONEWIRE_CRC8_TABLE 0
+#include <OneWire.h>
+
+#define DHT_USE_INTERRUPTS false
+#define DHT_USE_I_PIN_FOR_DATA true
+#include <HeatHackSensors.h>
+
+#include <HeatHack.h>
+
 
 #define GROUP_ID 212
 #define NODE_ID 2
@@ -23,9 +28,6 @@
 
 // dht11/22 temp/humidity (uses I pin on port 1)
 #define DHT_PORT 1
-#define DHT_USE_INTERRUPTS false
-#define DHT_USE_I_PIN_FOR_DATA true
-#define DHT_TYPE DHT11_TYPE
 
 // Dallas DS18B (uses D pin on port 1)
 #define DS18B_PORT 1
@@ -47,7 +49,7 @@
 #define RADIO_SYNC_MODE 2
 
 #if DHT_PORT
-  DHT dht(DHT_PORT, DHT_TYPE);
+  DHT dht(DHT_PORT);
 #endif
 
 #if DS18B_PORT
@@ -71,7 +73,7 @@ Scheduler scheduler (schedbuf, TASK_END);
 ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 
 static unsigned long lastAckTime = millis();
-static byte myNodeID;       // node ID used for this unit
+uint8_t myNodeID = NODE_ID;       // node ID used for this unit
 
 
 /////////////////////////////////////////////////////////////////////
@@ -206,6 +208,50 @@ void doMeasure() {
   firstMeasure = false;
 }
 
+#define BUFLEN 10
+char buffer[BUFLEN];
+
+inline bool readline()
+{
+  static uint8_t pos = 0;
+
+  int readch = Serial.read();
+
+  if (readch > 0) {
+    switch (readch) {
+      case '\n': // Ignore new-lines
+        break;
+      case '\r': // Return on CR
+        pos = 0;  // Reset position index ready for next time
+        return true;
+      default:
+        if (pos < BUFLEN-1) {
+          buffer[pos++] = readch;
+          buffer[pos] = 0;
+        }
+    }
+  }
+  // No end of line has been found.
+  return false;
+}
+
+byte parseInt(char* buf) {
+  byte result = 0;
+  char *cur = buf + 1;
+  
+  // find end of string
+  while (*cur) cur++;
+  cur--;
+  
+  // parse from end to start
+  while (cur != buf) {
+    char c = *cur;
+    if (c >= '0' && c <= '9') result += (c - '0');
+    cur--;
+  }
+  
+  return result;
+}
 
 /////////////////////////////////////////////////////////////////////
 void setup() {
@@ -221,8 +267,31 @@ void setup() {
   Serial.print("g");
   Serial.print(GROUP_ID);
   Serial.print(" n");
-  Serial.println(NODE_ID);
+  Serial.println(myNodeID, DEC);
   serialFlush();
+
+  buffer[0] = 0;
+  
+  do {
+    if (readline()) {
+      switch(buffer[0]) {
+        case 'n':
+          // set node id: n2 to n30
+          myNodeID = parseInt(buffer);
+          break;
+      }
+      
+      break;
+    }
+  }
+  while (buffer[0] != 0 || millis() < 5000);
+
+
+  Serial.print(" n");
+  Serial.println(myNodeID, DEC);
+  serialFlush();
+
+
 //#endif
 
   cli();
@@ -235,20 +304,29 @@ void setup() {
   bitClear(PORTB, 0);
 
   // initialise transmitter
-  myNodeID = rf12_initialize(NODE_ID, RF12_868MHZ, GROUP_ID);
+  myNodeID = rf12_initialize(myNodeID, RF12_868MHZ, GROUP_ID);
   rf12_control(0xC040); // set low-battery level to 2.2V instead of 3.1V
 
   // power down
   rf12_sleep(RF12_SLEEP);
 
-#if DS18B_PORT
-  ds18bNumDevices = ds18b.init();
+  #if DS18B_PORT
+    ds18bNumDevices = ds18b.init();
   
-  #if DEBUG
-    Serial.print("DS18B count: ");
-    Serial.println(ds18bNumDevices);
+    #if DEBUG
+      Serial.print("DS18B count: ");
+      Serial.println(ds18bNumDevices, DEC);
+    #endif
   #endif
-#endif
+
+  #if DHT_PORT    
+    #if DEBUG
+      Serial.print("DHT type: ");
+      Serial.println(dht.init(), DEC);
+    #else
+      dht.init();
+    #endif
+  #endif
 
   // do first measure immediately
   scheduler.timer(MEASURE, 0); 

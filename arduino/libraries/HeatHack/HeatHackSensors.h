@@ -1,23 +1,29 @@
 #ifndef HEATHACK_SENSORS_H
 #define HEATHACK_SENSORS_H
 
-#include <JeeLib.h>
 #include <avr/sleep.h>
-#include <OneWire.h>
 
-#define DHT11_TYPE 11
-#define DHT22_TYPE 22
+/*
+ * These includes won't get picked up properly due to the way the Arduino IDE
+ * builds the include directory list for the compiler. Instead, these includes
+ * need to be put in the main program file before the #include <HeatHackSensors.h> line.
+ 
+#include <JeeLib.h>
+
+#define ONEWIRE_CRC8_TABLE 0
+#include <OneWire.h>
+*/
 
 #define DS18B_INVALID_TEMP 9999
 
 
-//#ifndef DHT_USE_INTERRUPTS
-//	#define DHT_USE_INTERRUPTS true
-//#endif
+#ifndef DHT_USE_INTERRUPTS
+	#define DHT_USE_INTERRUPTS true
+#endif
 
-//#ifndef DHT_USE_I_PIN_FOR_DATA
-//	#define DHT_USE_I_PIN_FOR_DATA false
-//#endif
+#ifndef DHT_USE_I_PIN_FOR_DATA
+	#define DHT_USE_I_PIN_FOR_DATA false
+#endif
 
 #if DHT_USE_I_PIN_FOR_DATA
 	#define DHT_DATA_READ digiRead3
@@ -43,6 +49,14 @@
 
 #define DHT_MAX_MICROSECS 255
 #define DHT_LONG_PULSE_MICROSECS 90
+
+#define DHT_TYPE_NONE 0
+#define DHT11_TYPE 11
+#define DHT22_TYPE 22
+
+#define DHT11_ACTIVATION_MS 18
+#define DHT22_ACTIVATION_MS 1
+
 
 // Model IDs
 #define DS18S20MODEL 0x10  // also DS1820
@@ -154,12 +168,33 @@ public:
    * portNum: 1, 2, 3 or 4
    * sensorType: DHT11_TYPE or DHT22_TYPE
    */
-  DHT (byte portNum, byte sensorType)
-	: Port(portNum), type(sensorType) {
+  DHT (byte portNum)
+	: Port(portNum) {
+	type = DHT_TYPE_NONE;
   }
   
+  // initialise object by detecting the type of sensor connected (if there is one)
+  uint8_t init() {
+	enablePower();
+
+	if (testSensor(DHT22_ACTIVATION_MS)) {
+		type = DHT22_TYPE;
+	}
+	else if (testSensor(DHT11_ACTIVATION_MS)) {
+		type = DHT11_TYPE;
+	}
+	// else no sensor present. Leave type at default of none.
+
+	disablePower();
+	
+	return type;
+  }
+
   bool reading (int& temp, int& humi) {
 
+	// don't try reading if no sensor present or not initialised
+	if (type == DHT_TYPE_NONE) return false;
+  
 	enablePower();	
 
 	bool success;
@@ -182,15 +217,15 @@ public:
 
 	#if DEBUG
 	Serial.print("data: ");
-	Serial.print(data[0]);
+	Serial.print(data[0], DEC);
 	Serial.print(" ");
-	Serial.print(data[1]);
+	Serial.print(data[1], DEC);
 	Serial.print(" ");
-	Serial.print(data[2]);
+	Serial.print(data[2], DEC);
 	Serial.print(" ");
-	Serial.print(data[3]);
+	Serial.print(data[3], DEC);
 	Serial.print(" ");
-	Serial.println(data[4]);
+	Serial.println(data[4], DEC);
 	#endif
 
 	if (success) {
@@ -260,6 +295,35 @@ protected:
 	
 	// turn off A pin
 	digiWrite2(LOW);
+  }
+  
+  // return true if sensor responds within given activationTime
+  bool testSensor(uint8_t activationTime) {
+	// pull data line high to activate sensor
+	DHT_DATA_MODE(OUTPUT);
+	DHT_DATA_WRITE(LOW);
+	
+	// wait for min period required for the sensor
+	delay(activationTime);
+
+	// set bus back to high to indicate we're ready to receive the result
+	DHT_DATA_WRITE(HIGH);
+
+	// sensor starts its response by pulling bus low within 40us
+	delayMicroseconds(40);
+	
+	// enable pullup resistor for the input in case no sensor's connected
+	#if defined(__AVR_ATtiny84__)
+		// INPUT_PULLUP not supported yet in the libs
+		DHT_DATA_MODE(INPUT);
+		DHT_DATA_WRITE(HIGH);
+	#else
+		DHT_DATA_MODE(INPUT_PULLUP);
+	#endif
+
+	// sensor should have pulled line low by now
+	if (DHT_DATA_READ() == LOW) return true;
+	else return false;
   }
   
   inline bool initiateReading(void) {
