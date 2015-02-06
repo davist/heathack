@@ -152,15 +152,18 @@ class DHT : public Port {
   // Note that variables used for interrupt-based capture are declared static
   // so that the interrupt handler can access them.
   
+#if DHT_USE_INTERRUPTS  
   volatile static uint8_t data[5]; // holds the raw data
   volatile static uint8_t currentBit;
 
-#if DHT_USE_INTERRUPTS  
   // used specifically during interrupt-based capture
   volatile static uint32_t pulseStartTime;
   volatile static bool acquiring;
   volatile static bool acquiredSuccessfully;
   volatile static uint8_t dataPin;
+#else
+  static uint8_t data[5]; // holds the raw data
+  static uint8_t currentBit;
 #endif
   
 public:
@@ -174,7 +177,7 @@ public:
   }
   
   // initialise object by detecting the type of sensor connected (if there is one)
-  uint8_t init() {
+  void init(void) {
 	enablePower();
 
 	if (testSensor(DHT22_ACTIVATION_MS)) {
@@ -186,10 +189,12 @@ public:
 	// else no sensor present. Leave type at default of none.
 
 	disablePower();
-	
-	return type;
   }
 
+  inline uint8_t getType(void) {
+	return type;
+  }
+  
   bool reading (int& temp, int& humi) {
 
 	// don't try reading if no sensor present or not initialised
@@ -466,7 +471,7 @@ protected:
 		return false;
 	}
 
-	word t;
+	int t;
 
 	// higher precision DHT22 uses 2 bytes instead of 1
 	if (type == DHT22_TYPE) {
@@ -485,14 +490,17 @@ protected:
   }
 };
 
+#if DHT_USE_INTERRUPTS
 volatile uint8_t DHT::data[5]; // holds the raw data
 volatile uint8_t DHT::currentBit;
 
-#if DHT_USE_INTERRUPTS
 volatile uint32_t DHT::pulseStartTime;
 volatile bool DHT::acquiring;
 volatile bool DHT::acquiredSuccessfully;
 volatile uint8_t DHT::dataPin;
+#else
+uint8_t DHT::data[5]; // holds the raw data
+uint8_t DHT::currentBit;
 #endif
 
 #if DHT_USE_INTERRUPTS  
@@ -659,40 +667,28 @@ protected:
 
     // read the response
 
+	for (uint8_t i=0; i<9; i++) {
+		*scratchPad = oneWire.read();
+		scratchPad++;
+	}
+	
     // byte 0: temperature LSB
-    scratchPad[TEMP_LSB] = oneWire.read();
-
     // byte 1: temperature MSB
-    scratchPad[TEMP_MSB] = oneWire.read();
-
     // byte 2: high alarm temp
-    scratchPad[HIGH_ALARM_TEMP] = oneWire.read();
-
     // byte 3: low alarm temp
-    scratchPad[LOW_ALARM_TEMP] = oneWire.read();
-
     // byte 4:
     // DS18S20: store for crc
     // DS18B20 & DS1822: configuration register
-    scratchPad[CONFIGURATION] = oneWire.read();
-
     // byte 5:
     // internal use & crc
-    scratchPad[INTERNAL_BYTE] = oneWire.read();
-
     // byte 6:
     // DS18S20: COUNT_REMAIN
     // DS18B20 & DS1822: store for crc
-    scratchPad[COUNT_REMAIN] = oneWire.read();
-
     // byte 7:
     // DS18S20: COUNT_PER_C
     // DS18B20 & DS1822: store for crc
-    scratchPad[COUNT_PER_C] = oneWire.read();
-
     // byte 8:
     // SCTRACHPAD_CRC
-    scratchPad[SCRATCHPAD_CRC] = oneWire.read();
 
     oneWire.reset();
   }

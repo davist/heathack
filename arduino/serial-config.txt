@@ -1,0 +1,87 @@
+Notes for a configuration console on the serial port.
+
+#define BUFLEN 10
+char buffer[BUFLEN];
+
+inline bool readline()
+{
+  static uint8_t pos = 0;
+
+  int readch = Serial.read();
+
+  if (readch > 0) {
+    switch (readch) {
+      case '\n': // Ignore new-lines
+        break;
+      case '\r': // Return on CR
+        pos = 0;  // Reset position index ready for next time
+        return true;
+      default:
+        Serial.print(((char)readch));
+        if (pos < BUFLEN-1) {
+          buffer[pos++] = readch;
+          buffer[pos] = 0;
+        }
+    }
+  }
+  // No end of line has been found.
+  return false;
+}
+
+uint8_t parseInt(char* buf) {
+  uint8_t result = 0;
+  char *cur = buf;
+  
+  // find end of string
+  while (*cur) cur++;
+  cur--;
+  
+  // parse from end to start
+  uint8_t order = 1;
+  while (cur != buf) {
+    char c = *cur;
+    if (c >= '0' && c <= '9') result += (c - '0') * order;
+    cur--;
+    order *= 10;
+  }
+  
+  return result;
+}
+
+void displaySettings(void) {
+  Serial.print("g");
+  Serial.print(GROUP_ID);
+  Serial.print(" n");
+  Serial.print(myNodeID, DEC);
+  Serial.print(" i");
+  Serial.print(SECS_BETWEEN_TRANSMITS, DEC);
+  Serial.println("s");
+  serialFlush();
+}
+
+setup() {
+  Serial.begin(BAUD_RATE);
+
+  displaySettings();  
+  Serial.print(":");
+
+  buffer[0] = 0;
+  
+  do {
+    if (readline()) {
+      switch(buffer[0]) {
+        case 'n':
+          // set node id: n2 to n30
+          myNodeID = parseInt(buffer);
+          if (myNodeID < 2 || myNodeID > 30) myNodeID = NODE_ID;
+          break;
+      }
+      
+      break;
+    }
+  }
+  while (buffer[0] != 0 || millis() < 5000);
+
+  Serial.println();
+  displaySettings();  
+}

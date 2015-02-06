@@ -70,6 +70,17 @@
 
 #define PORT_IRQ 1
 
+// EEPROM addresses for storing settings
+// Note Jeelib's RF12 uses 0x20 to 0x3f for settings and
+// 0x40 to 0x4f for an encryption key
+// Group and Node id are shared with Jeelib, the rest are specific to Heathack.
+
+#define HH_EEPROM_BASE ((uint8_t*) 0x60)
+
+#define EEPROM_GROUP    (RF12_EEPROM_ADDR + 0)
+#define EEPROM_NODE     (RF12_EEPROM_ADDR + 1)
+#define EEPROM_INTERVAL (HH_EEPROM_BASE + 0)
+
 // sensor types
 namespace HHSensorType {
     enum type {

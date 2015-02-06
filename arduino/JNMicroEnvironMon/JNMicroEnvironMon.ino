@@ -1,7 +1,74 @@
-#include <JeeLib.h>
-#include <avr/sleep.h>
+/**
+ * Default setup is:
+ *
+ * - DHT11/22 temp/humidty sensor on port one with its data line connected to the I pin.
+ * - DS18B temp sensor also on port one with data connected to D.
+ *
+ * The A pin should be used instead of + for powering both sensors so that power is only
+ * switched on when needed.
+ *
+ * Presence and type of the sensors is detected automatically so no need to reconfigure the
+ * code for different setups.
+ *
+ * Config console
+ * --------------
+ * The group id, node id and transmit interval can be altered without reprogramming by
+ * attaching a BlinkPlug and serial terminal. If a BlinkPlug isn't available, 2 push buttons
+ * on a breadboard can be used, or even just 2 wires touched to ground!
+ *
+ * Remove any sensor plug that's attached to the Micro and fit the BlinkPlug. Alternatively,
+ * connect wires to the DIO, AIO and GND pins. Touch AIO to GND for one button, and DIO to GND
+ * for the other.
+ * Connect TX on the Micro to RX on the serial adapter (eg USB BUB). Connect +3V and GND
+ * to the respective pins on the serial connector (VCC and GND on a BUB).
+ *
+ * Start up a serial terminal on the PC at 9600 baud then press the reset button on the Micro
+ * while holding down either of the BlinkPlug buttons. Three lines of text should appear:
+ * g212 n20 i10
+ * Config:
+ * g212
+ *
+ * The first line is the current settings: group 212, node 20, interval 10 secs.
+ * The last line is the setting being edited. Press one of the buttons to cycle between the
+ * settings (group, node, interval and save) and press the other button to change the value.
+ * Group goes from 200 to 212, node from 20 to 30 and interval is 10, 60 or 600.
+ *
+ * To save the values permanently into the EEPROM, select save and then press the other
+ * button. It will change to say 'saved' to confirm.
+ *
+ * Reset the Micro again and check that it shows the correct settings.
+ *
+ * Remove the serial connection and buttons and reattach the sensors.
+ */
+
+// Port number for DHT sensor (must be 1 on JNMicro)
+// Comment out to remove the DHT code
+#define DHT_PORT 1
+
+// Dallas DS18B port number (must be 1 on JNMicro)
+// Comment out to remove the DS18B code
+#define DS18B_PORT 1
+
+// Enable config console. Comment out to disable.
+#define CONFIG_CONSOLE true
+
+// Standard JeeNode group id is 212
+// Config console in this code supports 200 - 212 for simplicity (full range is 0 - 212)
+#define DEFAULT_GROUP_ID 212
+
+// Node id 2 - 30 (1 reserved for receiver)
+// Config console in this code supports 20 - 30
+#define DEFAULT_NODE_ID 20
+
+// How frequently readings are sent normally, in 10s of seconds
+// Config console supports 1, 6 and 60 (10secs, 1min, 10mins)
+#define DEFAULT_INTERVAL 1
 
 //#define DEBUG true
+
+#include <JeeLib.h>
+#include <avr/sleep.h>
+#include <avr/eeprom.h>
 
 // need to include OneWire here as it won't get picked up from inside HeatHackSensors.h
 #define ONEWIRE_CRC8_TABLE 0
@@ -14,30 +81,10 @@
 #include <HeatHack.h>
 
 
-#define GROUP_ID 212
-#define NODE_ID 2
-
-/**
- * Default setup is:
- *
- * - DHT11/22 temp/humidty sensor on port 1 with its data line connected to the D pin.
- *
- * Intention is to have both DHT and DS18 on port 1 with DHT's data on I and DS's on D
- * and the A pin providing switchable power for both.
- */
-
-// dht11/22 temp/humidity (uses I pin on port 1)
-#define DHT_PORT 1
-
-// Dallas DS18B (uses D pin on port 1)
-#define DS18B_PORT 1
-
-
 // To avoid wasting power sending frequent readings when the receiver isn't contactable,
 // the node will switch to a less-frequent mode when it doesn't get acknowledgments from
 // the receiver. It will switch back to normal mode as soon as an ack is received.
-#define SECS_BETWEEN_TRANSMITS 10          // how frequently readings are sent normally, in seconds
-#define MAX_SECS_WITHOUT_ACK 600           // how long to go without an acknowledgement before switching to less-frequent mode
+#define MAX_MS_WITHOUT_ACK (600 * 1000)          // how long to go without an acknowledgement before switching to less-frequent mode
 #define SECS_BETWEEN_TRANSMITS_NO_ACK 600  // how often to send readings in the less-frequent mode
 
 #define ACK_TIME        10  // number of milliseconds to wait for an ack
@@ -64,47 +111,68 @@ HeatHackData dataPacket;
 #define SENSOR_HUMIDITY 3
 #define SENSOR_TEMP2    6
 
-// scheduler for timing periodic tasks
-enum { MEASURE, TASK_END };
-static word schedbuf[TASK_END];
-Scheduler scheduler (schedbuf, TASK_END);
-
 // interrupt handler for the Sleepy watchdog
 ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 
-static unsigned long lastAckTime = millis();
-uint8_t myNodeID = NODE_ID;       // node ID used for this unit
+// time we last received an acknowledgement from the receiver
+uint32_t lastAckTime = millis();
+
+// if not received an ack for a while, hibernating will be true
+bool hibernating = false;
+
+enum ConfigMode { GROUP, NODE, INTERVAL, SAVE, NUM_MODES };
+enum SaveState { UNSAVED, SAVED };
+
+const uint8_t GROUP_MIN = 200;
+const uint8_t GROUP_MAX = 212;
+
+const uint8_t NODE_MIN = 20;
+const uint8_t NODE_MAX = 30;
+
+const uint8_t INTERVAL_MIN = 1;  // 10 secs min
+const uint8_t INTERVAL_MAX = 60; // 10 mins max
+
+uint8_t myNodeID;       // node ID used for this unit
+uint8_t myGroupID;      // group ID used for this unit
+uint8_t myInterval;     // interval between transmissions in 10s of secs
+
+uint8_t saveState = UNSAVED;
+uint8_t configMode = GROUP;
 
 
 /////////////////////////////////////////////////////////////////////
 // wait a few milliseconds for proper ACK to me, return true if indeed received
-static byte waitForAck() {
-    MilliTimer ackTimer;
-    while (!ackTimer.poll(ACK_TIME)) {
-        if (rf12_recvDone() && rf12_crc == 0 &&
-                // see http://talk.jeelabs.net/topic/811#post-4712
-                rf12_hdr == (RF12_HDR_DST | RF12_HDR_CTL | myNodeID))
-            return 1;
+bool waitForAck() {
+    uint32_t ackTimer = millis();
+
+    do {
+        if (rf12_recvDone() &&
+            rf12_crc == 0 &&
+            rf12_hdr == (RF12_HDR_DST | RF12_HDR_CTL | myNodeID)) {
+              
+          // see http://talk.jeelabs.net/topic/811#post-4712
+          return true;
+        }
         set_sleep_mode(SLEEP_MODE_IDLE);
         sleep_mode();
     }
-    return 0;
+    while (millis() - ackTimer < ACK_TIME);
+    
+    return false;
 }
 
 
 /////////////////////////////////////////////////////////////////////
-//#if DEBUG
-inline void serialFlush () {
+void serialFlush () {
     #if ARDUINO >= 100
         Serial.flush();
     #endif  
     delay(10); // make sure tx buf is empty before going back to sleep
 }
-//#endif
 
 /////////////////////////////////////////////////////////////////////
 // periodic report, i.e. send out a packet and optionally report on serial port
-static void doReport() {
+inline void doReport() {
     #if DEBUG  
         Serial.println("--------------------------");
 
@@ -132,44 +200,32 @@ static void doReport() {
       return;
     }
     
-    for (byte i = 0; i < RETRY_LIMIT; i++) {
-      
-      if (i != 0) {
+    bool acked = false;
+    byte retry = 0;
+
+    do {
+      if (retry != 0) {
         // delay before any retry
         Sleepy::loseSomeTime(RETRY_PERIOD);
       }
       
+      // send the data and wait for an acknowledgement
       rf12_sleep(RF12_WAKEUP);
       rf12_sendNow(RF12_HDR_ACK, &dataPacket, dataPacket.getTransmitSize());
       rf12_sendWait(RADIO_SYNC_MODE);
-      byte acked = waitForAck();
+      acked = waitForAck();
       rf12_sleep(RF12_SLEEP);
-
-      if (acked) {
-        #ifdef DEBUG  
-            Serial.print(" ack ");
-            Serial.println((int) i);
-            serialFlush();
-        #endif
-        
-        lastAckTime = millis();
-        break;        
-      }
-      else {
-        #ifdef DEBUG  
-            Serial.print(" no ack ");
-            Serial.println((int) i);
-            serialFlush();
-        #endif
-      }
+      
+      retry++;
     }
+    // if hibernating only send once, otherwise keep resending until ack received or retry limit reached
+    while (!acked && !hibernating && retry < RETRY_LIMIT);
 }
 
 
 /////////////////////////////////////////////////////////////////////
-void doMeasure() {
+inline void doMeasure() {
   static bool firstMeasure = true;
-  int humi, temp;
   
   // format data packet
   dataPacket.clear();
@@ -184,6 +240,8 @@ void doMeasure() {
   }
 
 #if DHT_PORT
+  int humi, temp;
+
   if (dht.reading(temp, humi)) {
     dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
     dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
@@ -208,49 +266,159 @@ void doMeasure() {
   firstMeasure = false;
 }
 
-#define BUFLEN 10
-char buffer[BUFLEN];
-
-inline bool readline()
-{
-  static uint8_t pos = 0;
-
-  int readch = Serial.read();
-
-  if (readch > 0) {
-    switch (readch) {
-      case '\n': // Ignore new-lines
-        break;
-      case '\r': // Return on CR
-        pos = 0;  // Reset position index ready for next time
-        return true;
-      default:
-        if (pos < BUFLEN-1) {
-          buffer[pos++] = readch;
-          buffer[pos] = 0;
-        }
-    }
-  }
-  // No end of line has been found.
-  return false;
+inline void readEeprom(void) {
+  myGroupID = eeprom_read_byte(EEPROM_GROUP);
+  myNodeID = eeprom_read_byte(EEPROM_NODE);
+  myInterval = eeprom_read_byte(EEPROM_INTERVAL); // interval stored in 10s of seconds
+  
+  // validate the values in case they've never been initialised or have been corrupted
+  if (myGroupID < GROUP_MIN || myGroupID > GROUP_MAX) myGroupID= DEFAULT_GROUP_ID;
+  if (myNodeID < NODE_MIN || myNodeID > NODE_MAX) myNodeID= DEFAULT_NODE_ID;
+  if (myInterval < INTERVAL_MIN || myInterval > INTERVAL_MAX) myInterval= DEFAULT_INTERVAL;
 }
 
-byte parseInt(char* buf) {
-  byte result = 0;
-  char *cur = buf + 1;
-  
-  // find end of string
-  while (*cur) cur++;
-  cur--;
-  
-  // parse from end to start
-  while (cur != buf) {
-    char c = *cur;
-    if (c >= '0' && c <= '9') result += (c - '0');
-    cur--;
+inline void displaySettings(void) {
+  Serial.println();
+  Serial.print("g");
+  Serial.print(myGroupID, DEC);
+  Serial.print(" n");
+  Serial.print(myNodeID, DEC);
+  Serial.print(" i");
+  Serial.print(myInterval * 10, DEC);
+  Serial.println();
+}
+
+inline void writeEeprom(void) {
+  // only write values that have changed to avoid excessive wear on the memory
+  eeprom_update_byte(EEPROM_GROUP, myGroupID);
+  eeprom_update_byte(EEPROM_NODE, myNodeID);
+  eeprom_update_byte(EEPROM_INTERVAL, myInterval);
+}
+
+void displayCurrentSetting() {
+
+  switch (configMode) {
+    case GROUP:
+      Serial.print("\rg");
+      Serial.print(myGroupID, DEC);
+      break;
+    case NODE:
+      Serial.print("\rn");
+      Serial.print(myNodeID, DEC);
+      break;
+    case INTERVAL:
+      Serial.print("\ri");
+      Serial.print(myInterval * 10, DEC);
+      break;
+    case SAVE:
+      Serial.print("\rsave");
+      if (saveState == SAVED) {
+        Serial.print("d");
+      }
+      break;
   }
   
-  return result;
+  // blank out any left over text from previous setting
+  Serial.print("  ");
+}
+
+void changeCurrentSetting() {
+  switch (configMode) {
+    case GROUP:
+      if (myGroupID < GROUP_MAX) myGroupID++;
+      else myGroupID = GROUP_MIN;
+      break;
+    case NODE:
+      if (myNodeID < NODE_MAX) myNodeID++;
+      else myNodeID = NODE_MIN;
+      break;
+    case INTERVAL:
+      switch (myInterval) {
+        case 1:
+          myInterval = 6;
+          break;
+        case 6:
+          myInterval = 60;
+          break;
+        default:
+          myInterval = 1;
+          break;
+      }
+      break;
+    case SAVE:
+      writeEeprom();
+      saveState = SAVED;
+      break;
+  }
+}
+
+void configConsole(void) {
+
+  Serial.println("Config");
+  displayCurrentSetting();
+
+  byte button1State = LOW;
+  byte button2State = LOW;
+  uint32_t lastCheckTime = 0;
+  const uint32_t DEBOUNCE_TIME = 100;
+  
+  while (1) {
+
+    uint32_t now = millis();
+    
+    if (now - lastCheckTime > DEBOUNCE_TIME) {
+
+      lastCheckTime = now;
+      
+      // check button 1
+      byte buttonNow = digitalRead(PORT1_DIO);
+    
+      if (buttonNow != button1State) {
+        #if DEBUG
+          Serial.print("button 1 now ");
+          Serial.println(buttonNow == HIGH ? "HIGH" : "LOW");
+        #endif
+
+        button1State = buttonNow;
+    
+        if (button1State == LOW) {
+          
+          #if DEBUG
+            Serial.println("button 1 pressed");
+          #endif
+          
+          // change mode
+          configMode++;
+          if (configMode == NUM_MODES) configMode = 0;
+          
+          if (saveState != UNSAVED) saveState = UNSAVED;
+          displayCurrentSetting();
+        }
+      }
+      
+      // check button 2
+      buttonNow = digitalRead(PORT1_AIO_AS_DIO);
+    
+      if (buttonNow != button2State) {
+        #if DEBUG
+          Serial.print("button 2 now ");
+          Serial.println(buttonNow == HIGH ? "HIGH" : "LOW");
+        #endif
+
+        button2State = buttonNow;
+
+        if (button2State == LOW) {      
+          #if DEBUG
+            Serial.println("button 2 pressed");
+          #endif
+          
+          // change current setting
+          changeCurrentSetting();
+          displayCurrentSetting();
+        }
+      }
+    }
+  }
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -258,116 +426,120 @@ void setup() {
 
   // wait for things to stablise
   Sleepy::loseSomeTime(1000);
-  
-//#ifdef DEBUG
-  Serial.begin(BAUD_RATE);
-  
-  //Serial.println("JeeNode HeatHack Environment Monitor");
 
-  Serial.print("g");
-  Serial.print(GROUP_ID);
-  Serial.print(" n");
-  Serial.println(myNodeID, DEC);
-  serialFlush();
-
-  buffer[0] = 0;
-  
-  do {
-    if (readline()) {
-      switch(buffer[0]) {
-        case 'n':
-          // set node id: n2 to n30
-          myNodeID = parseInt(buffer);
-          break;
-      }
-      
-      break;
-    }
-  }
-  while (buffer[0] != 0 || millis() < 5000);
-
-
-  Serial.print(" n");
-  Serial.println(myNodeID, DEC);
-  serialFlush();
-
-
-//#endif
-
+#if defined(__AVR_ATtiny84__)
   cli();
   CLKPR = bit(CLKPCE);
   CLKPR = 0; // div 1, i.e. speed up to 8 MHz
   sei();
+#endif
 
-  // power up the radio on JeenodeMicro v3
-  bitSet(DDRB, 0);
-  bitClear(PORTB, 0);
+  Serial.begin(BAUD_RATE);
 
-  // initialise transmitter
-  myNodeID = rf12_initialize(myNodeID, RF12_868MHZ, GROUP_ID);
-  rf12_control(0xC040); // set low-battery level to 2.2V instead of 3.1V
+  readEeprom();
+  displaySettings();  
 
-  // power down
-  rf12_sleep(RF12_SLEEP);
+#if CONFIG_CONSOLE
+
+  // turn on pull-up resistors for D and A pins
+  pinMode(PORT1_DIO, INPUT);
+  pinMode(PORT1_AIO_AS_DIO, INPUT);
+  digitalWrite(PORT1_DIO, HIGH);
+  digitalWrite(PORT1_AIO_AS_DIO, HIGH);
+
+  // if a button is down, enter config
+  if (digitalRead(PORT1_DIO) == LOW || digitalRead(PORT1_AIO_AS_DIO) == LOW) {
+    configConsole();
+  }
+  else {
+    // put pins in running mode
+    
+    // turn off pull-up on data line
+    digitalWrite(PORT1_DIO, LOW);
+
+    // A pin is switchable power - turn it off
+    digitalWrite(PORT1_AIO_AS_DIO, LOW);
+    pinMode(PORT1_AIO_AS_DIO, OUTPUT);    
+  }
+#endif
 
   #if DS18B_PORT
+
     ds18bNumDevices = ds18b.init();
-  
+
     #if DEBUG
-      Serial.print("DS18B count: ");
-      Serial.println(ds18bNumDevices, DEC);
+      Serial.print("#DS18: ");
+      Serial.print(ds18bNumDevices, DEC);
+      Serial.println();
     #endif
   #endif
 
   #if DHT_PORT    
+
+    dht.init();
+
     #if DEBUG
-      Serial.print("DHT type: ");
-      Serial.println(dht.init(), DEC);
-    #else
-      dht.init();
+      Serial.print("DHT: ");
+      Serial.print(dht.getType(), DEC);
+      Serial.println();
     #endif
   #endif
+  
+  serialFlush();
+  Serial.end();
 
-  // do first measure immediately
-  scheduler.timer(MEASURE, 0); 
+#if defined(__AVR_ATtiny84__)
+  // power up the radio on JeenodeMicro v3
+  bitSet(DDRB, 0);
+  bitClear(PORTB, 0);
+#endif
+
+  // initialise transmitter
+  myNodeID = rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
+  rf12_control(0xC040); // set low-battery level to 2.2V instead of 3.1V
+
+  // power down
+  rf12_sleep(RF12_SLEEP);
 }
 
 
 /////////////////////////////////////////////////////////////////////
 void loop() {
+  doMeasure();
+  doReport();
   
-    switch (scheduler.pollWaiting(false)) {
+  // if too long without ack, switch to hibernation mode
+  if ((millis() - lastAckTime) > MAX_MS_WITHOUT_ACK) {
+    hibernating = true;
+  }
+  
+  // calculate time till next measure and report
+  uint32_t delayMs;
+  if (hibernating) {  
+    delayMs = ((uint32_t)SECS_BETWEEN_TRANSMITS_NO_ACK) * 1000;
+  }
+  else {
+    delayMs = ((uint32_t)myInterval) * 10000;
+  }
 
-        case MEASURE:
-            doMeasure();
-            doReport();
-
-            // reschedule these measurements periodically
-            unsigned long secsSinceAck = (millis() - lastAckTime)/1000;
-            
-            if (secsSinceAck > MAX_SECS_WITHOUT_ACK) {
-              #ifdef DEBUG
-                Serial.print("No ack for ");
-                Serial.print(secsSinceAck);
-                Serial.print(" secs. Waiting ");
-                Serial.print(SECS_BETWEEN_TRANSMITS_NO_ACK);
-                Serial.println(" secs till next transmit.");
-                serialFlush();
-              #endif
-
-              scheduler.timer(MEASURE, SECS_BETWEEN_TRANSMITS_NO_ACK * 10);
-            }
-            else {
-              #ifdef DEBUG
-                Serial.print(SECS_BETWEEN_TRANSMITS);
-                Serial.println(" secs till next transmit.");
-                serialFlush();
-              #endif
-
-              scheduler.timer(MEASURE, SECS_BETWEEN_TRANSMITS * 10);
-            }
+  // wait for delayMs milliseconds
+  do {
+    uint32_t startTime = millis();
+  
+    // loseSomeTime is 60 secs max, so go to sleep for up to 60 secs
+    Sleepy::loseSomeTime(delayMs <= 60000 ? delayMs : 60000);
     
-            break;
+    // see how long we really slept (in case an interrupt woke us early)
+    uint32_t sleepMs = millis() - startTime;
+    
+    if (sleepMs < delayMs) {
+      delayMs -= sleepMs;
     }
+    else {
+      delayMs = 0;
+    }
+  }
+  // loseSomeTime has minimum resolution of 16ms
+  while (delayMs > 16);
 }  
 
