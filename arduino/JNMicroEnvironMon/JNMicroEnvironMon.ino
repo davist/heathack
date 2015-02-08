@@ -16,16 +16,19 @@
  * attaching a BlinkPlug and serial terminal. If a BlinkPlug isn't available, 2 push buttons
  * on a breadboard can be used, or even just 2 wires touched to ground!
  *
- * Remove any sensor plug that's attached to the Micro and fit the BlinkPlug. Alternatively,
- * connect wires to the DIO, AIO and GND pins. Touch AIO to GND for one button, and DIO to GND
- * for the other.
+ * Remove any sensor plug that's attached to the Micro and fit the BlinkPlug. It may be
+ * simpler to fit the BlinkPlug on a breadboard and run connectors to the Micro.
+ * Alternatively, connect wires to the DIO, AIO and GND pins. Touch AIO to GND for one button,
+ * and DIO to GND for the other.
+ * To enable config mode, connect RX to GND.
+ *
  * Connect TX on the Micro to RX on the serial adapter (eg USB BUB). Connect +3V and GND
  * to the respective pins on the serial connector (VCC and GND on a BUB).
  *
- * Start up a serial terminal on the PC at 9600 baud then press the reset button on the Micro
- * while holding down either of the BlinkPlug buttons. Three lines of text should appear:
+ * Start up a serial terminal on the PC at 9600 baud then press the reset button on the Micro.
+ * Three lines of text should appear:
  * g212 n20 i10
- * Config:
+ * Config
  * g212
  *
  * The first line is the current settings: group 212, node 20, interval 10 secs.
@@ -40,6 +43,12 @@
  *
  * Remove the serial connection and buttons and reattach the sensors.
  */
+
+// To use debug you will need to disable one of the sections below (DHT, DS18B or CONFIG_CONSOLE support)
+// to free up some memory.
+// Or run the code on a standard Jeenode to do the debugging.
+//#define DEBUG true
+
 
 // Port number for DHT sensor (must be 1 on JNMicro)
 // Comment out to remove the DHT code
@@ -64,8 +73,6 @@
 // Config console supports 1, 6 and 60 (10secs, 1min, 10mins)
 #define DEFAULT_INTERVAL 1
 
-//#define DEBUG true
-
 #include <JeeLib.h>
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
@@ -84,7 +91,7 @@
 // To avoid wasting power sending frequent readings when the receiver isn't contactable,
 // the node will switch to a less-frequent mode when it doesn't get acknowledgments from
 // the receiver. It will switch back to normal mode as soon as an ack is received.
-#define MAX_MS_WITHOUT_ACK (600 * 1000)          // how long to go without an acknowledgement before switching to less-frequent mode
+#define MAX_SECS_WITHOUT_ACK (30 * 60)  // how long to go without an acknowledgement before switching to less-frequent mode
 #define SECS_BETWEEN_TRANSMITS_NO_ACK 600  // how often to send readings in the less-frequent mode
 
 #define ACK_TIME        10  // number of milliseconds to wait for an ack
@@ -115,7 +122,7 @@ HeatHackData dataPacket;
 ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 
 // time we last received an acknowledgement from the receiver
-uint32_t lastAckTime = millis();
+uint32_t lastAckTime = 0;
 
 // if not received an ack for a while, hibernating will be true
 bool hibernating = false;
@@ -151,6 +158,8 @@ bool waitForAck() {
             rf12_hdr == (RF12_HDR_DST | RF12_HDR_CTL | myNodeID)) {
               
           // see http://talk.jeelabs.net/topic/811#post-4712
+    
+          lastAckTime = millis();
           return true;
         }
         set_sleep_mode(SLEEP_MODE_IDLE);
@@ -266,6 +275,7 @@ inline void doMeasure() {
   firstMeasure = false;
 }
 
+/////////////////////////////////////////////////////////////////////
 inline void readEeprom(void) {
   myGroupID = eeprom_read_byte(EEPROM_GROUP);
   myNodeID = eeprom_read_byte(EEPROM_NODE);
@@ -277,6 +287,7 @@ inline void readEeprom(void) {
   if (myInterval < INTERVAL_MIN || myInterval > INTERVAL_MAX) myInterval= DEFAULT_INTERVAL;
 }
 
+/////////////////////////////////////////////////////////////////////
 inline void displaySettings(void) {
   Serial.println();
   Serial.print("g");
@@ -288,6 +299,7 @@ inline void displaySettings(void) {
   Serial.println();
 }
 
+/////////////////////////////////////////////////////////////////////
 inline void writeEeprom(void) {
   // only write values that have changed to avoid excessive wear on the memory
   eeprom_update_byte(EEPROM_GROUP, myGroupID);
@@ -295,6 +307,7 @@ inline void writeEeprom(void) {
   eeprom_update_byte(EEPROM_INTERVAL, myInterval);
 }
 
+/////////////////////////////////////////////////////////////////////
 void displayCurrentSetting() {
 
   switch (configMode) {
@@ -322,6 +335,7 @@ void displayCurrentSetting() {
   Serial.print("  ");
 }
 
+/////////////////////////////////////////////////////////////////////
 void changeCurrentSetting() {
   switch (configMode) {
     case GROUP:
@@ -352,8 +366,15 @@ void changeCurrentSetting() {
   }
 }
 
+/////////////////////////////////////////////////////////////////////
 void configConsole(void) {
 
+  // use A and D as button inputs with pull-up enabled
+  pinMode(PORT1_DIO, INPUT);
+  pinMode(PORT1_AIO_AS_DIO, INPUT);
+  digitalWrite(PORT1_DIO, HIGH);
+  digitalWrite(PORT1_AIO_AS_DIO, HIGH);
+  
   Serial.println("Config");
   displayCurrentSetting();
 
@@ -441,25 +462,17 @@ void setup() {
 
 #if CONFIG_CONSOLE
 
-  // turn on pull-up resistors for D and A pins
-  pinMode(PORT1_DIO, INPUT);
-  pinMode(PORT1_AIO_AS_DIO, INPUT);
-  digitalWrite(PORT1_DIO, HIGH);
-  digitalWrite(PORT1_AIO_AS_DIO, HIGH);
+  // turn on pull-up resistor for RX pin (port 2 DIO)
+  pinMode(PORT2_DIO, INPUT);
+  digitalWrite(PORT2_DIO, HIGH);
 
-  // if a button is down, enter config
-  if (digitalRead(PORT1_DIO) == LOW || digitalRead(PORT1_AIO_AS_DIO) == LOW) {
+  // if RX is grounded, enter config
+  if (digitalRead(PORT2_DIO) == LOW) {
     configConsole();
   }
   else {
-    // put pins in running mode
-    
     // turn off pull-up on data line
-    digitalWrite(PORT1_DIO, LOW);
-
-    // A pin is switchable power - turn it off
-    digitalWrite(PORT1_AIO_AS_DIO, LOW);
-    pinMode(PORT1_AIO_AS_DIO, OUTPUT);    
+    digitalWrite(PORT2_DIO, LOW);
   }
 #endif
 
@@ -486,8 +499,11 @@ void setup() {
   #endif
   
   serialFlush();
-  Serial.end();
 
+  #if !DEBUG
+    Serial.end();
+  #endif
+  
 #if defined(__AVR_ATtiny84__)
   // power up the radio on JeenodeMicro v3
   bitSet(DDRB, 0);
@@ -509,7 +525,7 @@ void loop() {
   doReport();
   
   // if too long without ack, switch to hibernation mode
-  if ((millis() - lastAckTime) > MAX_MS_WITHOUT_ACK) {
+  if ((millis() - lastAckTime) > ((uint32_t)MAX_SECS_WITHOUT_ACK) * 1000) {
     hibernating = true;
   }
   
@@ -522,6 +538,14 @@ void loop() {
     delayMs = ((uint32_t)myInterval) * 10000;
   }
 
+  #if DEBUG
+    Serial.print("hibernating: ");
+    Serial.println(hibernating ? "true" : "false");
+    Serial.print("delay(ms): ");
+    Serial.println(delayMs);
+    serialFlush();
+  #endif
+
   // wait for delayMs milliseconds
   do {
     uint32_t startTime = millis();
@@ -531,15 +555,28 @@ void loop() {
     
     // see how long we really slept (in case an interrupt woke us early)
     uint32_t sleepMs = millis() - startTime;
-    
+
     if (sleepMs < delayMs) {
       delayMs -= sleepMs;
     }
     else {
       delayMs = 0;
     }
+
+    #if DEBUG
+      Serial.print("slept for (ms): ");
+      Serial.println(sleepMs);
+      Serial.print("new delay(ms): ");
+      Serial.println(delayMs);
+      serialFlush();
+    #endif
   }
   // loseSomeTime has minimum resolution of 16ms
   while (delayMs > 16);
+  
+  #if DEBUG
+    Serial.println("finished sleeping");
+    serialFlush();
+  #endif  
 }  
 
