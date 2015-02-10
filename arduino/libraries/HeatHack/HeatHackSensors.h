@@ -10,7 +10,7 @@
  
 #include <JeeLib.h>
 
-#define ONEWIRE_CRC8_TABLE 0
+#define ONEWIRE_CRC8_TABLE 0 // just for Micro to reduce code size
 #include <OneWire.h>
 */
 

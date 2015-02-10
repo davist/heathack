@@ -61,21 +61,20 @@
 // Enable config console. Comment out to disable.
 #define CONFIG_CONSOLE true
 
-// Standard JeeNode group id is 212
-// Config console in this code supports 200 - 212 for simplicity (full range is 0 - 212)
-#define DEFAULT_GROUP_ID 212
-
-// Node id 2 - 30 (1 reserved for receiver)
-// Config console in this code supports 20 - 30
+// Override default node id
 #define DEFAULT_NODE_ID 20
 
-// How frequently readings are sent normally, in 10s of seconds
-// Config console supports 1, 6 and 60 (10secs, 1min, 10mins)
-#define DEFAULT_INTERVAL 1
+// override default min/max to match what the Micro's config console supports
+#define GROUP_MIN 200
+#define GROUP_MAX 212
+
+#define NODE_MIN 20
+#define NODE_MAX 30
+
+#define INTERVAL_MIN 1  // 10 secs min
+#define INTERVAL_MAX 60 // 10 mins max
 
 #include <JeeLib.h>
-#include <avr/sleep.h>
-#include <avr/eeprom.h>
 
 // need to include OneWire here as it won't get picked up from inside HeatHackSensors.h
 #define ONEWIRE_CRC8_TABLE 0
@@ -83,24 +82,11 @@
 
 #define DHT_USE_INTERRUPTS false
 #define DHT_USE_I_PIN_FOR_DATA true
-#include <HeatHackSensors.h>
+#include "HeatHackSensors.h"
 
-#include <HeatHack.h>
+#include "HeatHack.h"
+#include "HeatHackShared.h"
 
-
-// To avoid wasting power sending frequent readings when the receiver isn't contactable,
-// the node will switch to a less-frequent mode when it doesn't get acknowledgments from
-// the receiver. It will switch back to normal mode as soon as an ack is received.
-#define MAX_SECS_WITHOUT_ACK (30 * 60)  // how long to go without an acknowledgement before switching to less-frequent mode
-#define SECS_BETWEEN_TRANSMITS_NO_ACK 600  // how often to send readings in the less-frequent mode
-
-#define ACK_TIME        10  // number of milliseconds to wait for an ack
-#define RETRY_PERIOD    1000  // how soon to retry if ACK didn't come in
-#define RETRY_LIMIT     5   // maximum number of times to retry
-
-// set the sync mode to 2 if the fuses are still the Arduino default
-// mode 3 (full powerdown) can only be used with 258 CK startup fuses
-#define RADIO_SYNC_MODE 2
 
 #if DHT_PORT
   DHT dht(DHT_PORT);
@@ -111,129 +97,20 @@
   uint8_t ds18bNumDevices;
 #endif
 
-HeatHackData dataPacket;
-
 #define SENSOR_LOWBATT  1
 #define SENSOR_TEMP     2
 #define SENSOR_HUMIDITY 3
-#define SENSOR_TEMP2    6
-
-// interrupt handler for the Sleepy watchdog
-ISR(WDT_vect) { Sleepy::watchdogEvent(); }
-
-// time we last received an acknowledgement from the receiver
-uint32_t lastAckTime = 0;
-
-// if not received an ack for a while, hibernating will be true
-bool hibernating = false;
+#define SENSOR_TEMP2    4  // base for DS18 sensors
 
 enum ConfigMode { GROUP, NODE, INTERVAL, SAVE, NUM_MODES };
 enum SaveState { UNSAVED, SAVED };
-
-const uint8_t GROUP_MIN = 200;
-const uint8_t GROUP_MAX = 212;
-
-const uint8_t NODE_MIN = 20;
-const uint8_t NODE_MAX = 30;
-
-const uint8_t INTERVAL_MIN = 1;  // 10 secs min
-const uint8_t INTERVAL_MAX = 60; // 10 mins max
-
-uint8_t myNodeID;       // node ID used for this unit
-uint8_t myGroupID;      // group ID used for this unit
-uint8_t myInterval;     // interval between transmissions in 10s of secs
 
 uint8_t saveState = UNSAVED;
 uint8_t configMode = GROUP;
 
 
 /////////////////////////////////////////////////////////////////////
-// wait a few milliseconds for proper ACK to me, return true if indeed received
-bool waitForAck() {
-    uint32_t ackTimer = millis();
-
-    do {
-        if (rf12_recvDone() &&
-            rf12_crc == 0 &&
-            rf12_hdr == (RF12_HDR_DST | RF12_HDR_CTL | myNodeID)) {
-              
-          // see http://talk.jeelabs.net/topic/811#post-4712
-    
-          lastAckTime = millis();
-          return true;
-        }
-        set_sleep_mode(SLEEP_MODE_IDLE);
-        sleep_mode();
-    }
-    while (millis() - ackTimer < ACK_TIME);
-    
-    return false;
-}
-
-
-/////////////////////////////////////////////////////////////////////
-void serialFlush () {
-    #if ARDUINO >= 100
-        Serial.flush();
-    #endif  
-    delay(10); // make sure tx buf is empty before going back to sleep
-}
-
-/////////////////////////////////////////////////////////////////////
-// periodic report, i.e. send out a packet and optionally report on serial port
-inline void doReport() {
-    #if DEBUG  
-        Serial.println("--------------------------");
-
-        for (byte i=0; i<dataPacket.numReadings; i++) {
-          Serial.print("* sensor ");
-          Serial.print(dataPacket.readings[i].sensorNumber);
-          Serial.print(": ");
-          Serial.print(HHSensorTypeNames[dataPacket.readings[i].sensorType]);
-          Serial.print(" ");
-          Serial.print(dataPacket.readings[i].getIntPartOfReading());
-          
-          uint8_t decimal = dataPacket.readings[i].getDecPartOfReading();        
-          if (decimal != NO_DECIMAL) {
-            // display as decimal value to 1 decimal place
-            Serial.print(".");
-            Serial.print(decimal);
-          }
-          Serial.println();        
-        }
-        serialFlush();
-    #endif
-
-    if (dataPacket.numReadings == 0) {
-      // nothing to do
-      return;
-    }
-    
-    bool acked = false;
-    byte retry = 0;
-
-    do {
-      if (retry != 0) {
-        // delay before any retry
-        Sleepy::loseSomeTime(RETRY_PERIOD);
-      }
-      
-      // send the data and wait for an acknowledgement
-      rf12_sleep(RF12_WAKEUP);
-      rf12_sendNow(RF12_HDR_ACK, &dataPacket, dataPacket.getTransmitSize());
-      rf12_sendWait(RADIO_SYNC_MODE);
-      acked = waitForAck();
-      rf12_sleep(RF12_SLEEP);
-      
-      retry++;
-    }
-    // if hibernating only send once, otherwise keep resending until ack received or retry limit reached
-    while (!acked && !hibernating && retry < RETRY_LIMIT);
-}
-
-
-/////////////////////////////////////////////////////////////////////
-inline void doMeasure() {
+inline void doMeasure(void) {
   static bool firstMeasure = true;
   
   // format data packet
@@ -275,17 +152,6 @@ inline void doMeasure() {
   firstMeasure = false;
 }
 
-/////////////////////////////////////////////////////////////////////
-inline void readEeprom(void) {
-  myGroupID = eeprom_read_byte(EEPROM_GROUP);
-  myNodeID = eeprom_read_byte(EEPROM_NODE);
-  myInterval = eeprom_read_byte(EEPROM_INTERVAL); // interval stored in 10s of seconds
-  
-  // validate the values in case they've never been initialised or have been corrupted
-  if (myGroupID < GROUP_MIN || myGroupID > GROUP_MAX) myGroupID= DEFAULT_GROUP_ID;
-  if (myNodeID < NODE_MIN || myNodeID > NODE_MAX) myNodeID= DEFAULT_NODE_ID;
-  if (myInterval < INTERVAL_MIN || myInterval > INTERVAL_MAX) myInterval= DEFAULT_INTERVAL;
-}
 
 /////////////////////////////////////////////////////////////////////
 inline void displaySettings(void) {
@@ -297,14 +163,6 @@ inline void displaySettings(void) {
   Serial.print(" i");
   Serial.print(myInterval * 10, DEC);
   Serial.println();
-}
-
-/////////////////////////////////////////////////////////////////////
-inline void writeEeprom(void) {
-  // only write values that have changed to avoid excessive wear on the memory
-  eeprom_update_byte(EEPROM_GROUP, myGroupID);
-  eeprom_update_byte(EEPROM_NODE, myNodeID);
-  eeprom_update_byte(EEPROM_INTERVAL, myInterval);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -455,9 +313,9 @@ void setup() {
   sei();
 #endif
 
-  Serial.begin(BAUD_RATE);
-
   readEeprom();
+
+  Serial.begin(BAUD_RATE);
   displaySettings();  
 
 #if CONFIG_CONSOLE
@@ -511,7 +369,7 @@ void setup() {
 #endif
 
   // initialise transmitter
-  myNodeID = rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
+  rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
   rf12_control(0xC040); // set low-battery level to 2.2V instead of 3.1V
 
   // power down
@@ -523,60 +381,6 @@ void setup() {
 void loop() {
   doMeasure();
   doReport();
-  
-  // if too long without ack, switch to hibernation mode
-  if ((millis() - lastAckTime) > ((uint32_t)MAX_SECS_WITHOUT_ACK) * 1000) {
-    hibernating = true;
-  }
-  
-  // calculate time till next measure and report
-  uint32_t delayMs;
-  if (hibernating) {  
-    delayMs = ((uint32_t)SECS_BETWEEN_TRANSMITS_NO_ACK) * 1000;
-  }
-  else {
-    delayMs = ((uint32_t)myInterval) * 10000;
-  }
-
-  #if DEBUG
-    Serial.print("hibernating: ");
-    Serial.println(hibernating ? "true" : "false");
-    Serial.print("delay(ms): ");
-    Serial.println(delayMs);
-    serialFlush();
-  #endif
-
-  // wait for delayMs milliseconds
-  do {
-    uint32_t startTime = millis();
-  
-    // loseSomeTime is 60 secs max, so go to sleep for up to 60 secs
-    Sleepy::loseSomeTime(delayMs <= 60000 ? delayMs : 60000);
-    
-    // see how long we really slept (in case an interrupt woke us early)
-    uint32_t sleepMs = millis() - startTime;
-
-    if (sleepMs < delayMs) {
-      delayMs -= sleepMs;
-    }
-    else {
-      delayMs = 0;
-    }
-
-    #if DEBUG
-      Serial.print("slept for (ms): ");
-      Serial.println(sleepMs);
-      Serial.print("new delay(ms): ");
-      Serial.println(delayMs);
-      serialFlush();
-    #endif
-  }
-  // loseSomeTime has minimum resolution of 16ms
-  while (delayMs > 16);
-  
-  #if DEBUG
-    Serial.println("finished sleeping");
-    serialFlush();
-  #endif  
+  doSleep();
 }  
 

@@ -7,6 +7,8 @@
 #include <WProgram.h> // Arduino 0022
 #endif
 
+#include <JeeLib.h>
+
 // The serial port baud rate to use for all HeatHack devices
 // JNMicro only supports 9600, 38400, or 115200
 #define BAUD_RATE 9600
@@ -70,18 +72,92 @@
 
 #define PORT_IRQ 1
 
-// EEPROM addresses for storing settings
-// Note Jeelib's RF12 uses 0x20 to 0x3f for settings and
-// 0x40 to 0x4f for an encryption key
-// Group and Node id are shared with Jeelib, the rest are specific to Heathack.
-
+/**
+ * EEPROM addresses for storing settings
+ * Note Jeelib's RF12 uses 0x20 to 0x3f for settings and
+ * 0x40 to 0x4f for an encryption key
+ * Group and Node id are shared with Jeelib, the rest are specific to Heathack.
+ */
 #define HH_EEPROM_BASE ((uint8_t*) 0x60)
 
 #define EEPROM_GROUP    (RF12_EEPROM_ADDR + 0)
 #define EEPROM_NODE     (RF12_EEPROM_ADDR + 1)
 #define EEPROM_INTERVAL (HH_EEPROM_BASE + 0)
 
-// sensor types
+/**
+ * Default values and ranges for eeprom data
+ */
+// Standard JeeNode group id is 212
+#ifndef DEFAULT_GROUP_ID
+#define DEFAULT_GROUP_ID 212
+#endif
+
+// Node id 2 - 30 (1 reserved for receiver)
+#ifndef DEFAULT_NODE_ID
+#define DEFAULT_NODE_ID 2
+#endif
+
+// How frequently readings are sent normally, in 10s of seconds
+#ifndef DEFAULT_INTERVAL
+#define DEFAULT_INTERVAL 1
+#endif
+
+// min and max
+
+#ifndef GROUP_MIN
+#define GROUP_MIN 1
+#endif
+
+#ifndef GROUP_MAX
+#define GROUP_MAX 212
+#endif
+
+#ifndef NODE_MIN
+#define NODE_MIN 2
+#endif
+
+#ifndef NODE_MAX
+#define NODE_MAX 30
+#endif
+
+// 10 secs min
+#ifndef INTERVAL_MIN
+#define INTERVAL_MIN 1
+#endif
+
+// 42.5 mins max
+#ifndef INTERVAL_MAX
+#define INTERVAL_MAX 255
+#endif
+
+/**
+ * Acknowledgement and retry settings
+ */
+#define ACK_TIME        10  // number of milliseconds to wait for an ack
+#define RETRY_PERIOD    1000  // how soon to retry if ACK didn't come in
+#define RETRY_LIMIT     5   // maximum number of times to retry
+
+// set the sync mode to 2 if the fuses are still the Arduino default
+// mode 3 (full powerdown) can only be used with 258 CK startup fuses
+#define RADIO_SYNC_MODE 2
+
+// To avoid wasting power sending frequent readings when the receiver isn't contactable,
+// the node will switch to a less-frequent mode when it doesn't get acknowledgments from
+// the receiver. It will switch back to normal mode as soon as an ack is received.
+#define MAX_SECS_WITHOUT_ACK (30 * 60)  // how long to go without an acknowledgement before switching to less-frequent mode
+#define SECS_BETWEEN_TRANSMITS_NO_ACK 600  // how often to send readings in the less-frequent mode
+
+/**
+ * LCD screen dimensions
+ */
+#define LCD_WIDTH 16
+#define LCD_HEIGHT 2
+
+/**
+ * Definitions for the data packet
+ */
+ 
+// Sensor types
 namespace HHSensorType {
     enum type {
         TEST        = 0,	// for sending test data. Should not be logged
@@ -98,6 +174,7 @@ namespace HHSensorType {
 #define NO_DECIMAL 255
  
 extern char* HHSensorTypeNames[];
+extern char* HHSensorUnitNames[];
 extern bool HHSensorTypeIsInt[]; 
  
 struct HHReading {
@@ -173,6 +250,5 @@ struct HeatHackData {
 		return sizeof(byte) + sizeof(HHReading) * numReadings;
 	}	
 };
-
 
 #endif
