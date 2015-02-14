@@ -80,9 +80,27 @@
  */
 #define HH_EEPROM_BASE ((uint8_t*) 0x60)
 
-#define EEPROM_GROUP    (RF12_EEPROM_ADDR + 0)
-#define EEPROM_NODE     (RF12_EEPROM_ADDR + 1)
-#define EEPROM_INTERVAL (HH_EEPROM_BASE + 0)
+#define EEPROM_GROUP    (RF12_EEPROM_ADDR + 0) // group id
+#define EEPROM_NODE     (RF12_EEPROM_ADDR + 1) // node id
+#define EEPROM_INTERVAL (HH_EEPROM_BASE + 0)   // transmit interval in 10s of secs
+#define EEPROM_RX_FLAGS (HH_EEPROM_BASE + 1)   // flags specific to the receiver
+#define EEPROM_PORT1    (HH_EEPROM_BASE + 2)   // type of sensor attached to port 1
+#define EEPROM_PORT2    (HH_EEPROM_BASE + 3)   // type of sensor attached to port 2
+#define EEPROM_PORT3    (HH_EEPROM_BASE + 4)   // type of sensor attached to port 3
+#define EEPROM_PORT4    (HH_EEPROM_BASE + 5)   // type of sensor attached to port 4
+
+#define RX_FLAG_ACK 0x01
+#define RX_FLAG_VERBOSE 0x02
+
+// per-port sensor types
+#define SENSOR_NONE  1   // no sensor attached
+#define SENSOR_AUTO  2   // auto-detect DHT11/22, DS18B20, Room Board with HYT131, LCD display, (or none)
+#define SENSOR_LDR   3   // light-dependent resistor between AIO and GND pins
+#define SENSOR_PULSE 4   // pulsed input on DIO pin (e.g. hall-effect switch or photo-detector for meter reading)
+
+// max sensor type number
+#define SENSOR_MIN 1
+#define SENSOR_MAX 4
 
 /**
  * Default values and ranges for eeprom data
@@ -105,7 +123,7 @@
 // min and max
 
 #ifndef GROUP_MIN
-#define GROUP_MIN 1
+#define GROUP_MIN 200
 #endif
 
 #ifndef GROUP_MAX
@@ -211,7 +229,8 @@ struct HHReading {
 #define HH_MAX_READINGS 21
 
 struct HeatHackData {
-	byte numReadings : 5;
+	bool isRetransmit : 1;
+	byte numReadings : 4;
 	byte sequence : 3;
 	HHReading readings[HH_MAX_READINGS];
 
@@ -221,6 +240,7 @@ struct HeatHackData {
 			readings[i].clear();
 		}
 		numReadings = 0;
+		isRetransmit = false;
 		sequence++;
 	}
 	

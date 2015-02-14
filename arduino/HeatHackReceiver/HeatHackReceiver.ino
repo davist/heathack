@@ -1,13 +1,8 @@
+// enable code in HeatHack lib that's just for decoding received packets
+#define RECEIVER_NODE true
+
 #include <JeeLib.h>
 #include <HeatHack.h>
-
-#define DEBUG 1
-
-#define GROUP_ID 212
-#define NODE_ID 1
-
-// enable code in HeatHack lib that's just for decoding received packets
-#define RECEIVER_NODE
 
 // holds last seen sequence number for each node
 byte lastSequence[30];
@@ -15,18 +10,27 @@ byte lastSequence[30];
 /////////////////////////////////////////////////////////////////////
 void setup() {
 
+  readEeprom();
+
   Serial.begin(BAUD_RATE);
   
   Serial.println("JeeNode HeatHack Receiver");
 
   Serial.print("Using group id ");
-  Serial.print(GROUP_ID);
+  Serial.print(myGroupID);
   Serial.print(" and node id ");
-  Serial.println(NODE_ID);
+  Serial.println(myNodeID);
   Serial.println();
-    
+  
+  if (receiverFlags & RX_FLAG_ACK) {
+    Serial.print("Acknowledgements enabled (this is the main receiver)");
+  }
+  else {
+    Serial.print("Acknowledgements disabled (this is a secondary receiver - listening only)");
+  }
+  
   // initialise transceiver
-  rf12_initialize(NODE_ID, RF12_868MHZ, GROUP_ID);
+  rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
   
   // init lastSequences to unused values
   for (byte i=0; i<30; i++) {
@@ -43,15 +47,16 @@ void loop() {
     // get node id from packet header
     byte node = rf12_hdr & RF12_HDR_MASK;
 
-    // send ack immediately to avoid delays caused by time taken to write to serial port
-    if(RF12_WANTS_ACK){
-      rf12_sendStart(RF12_ACK_REPLY,0,0);
-      rf12_sendWait(1);
-      #if DEBUG
-        Serial.print("Sent ack to node ");
-        Serial.println(node);
-        Serial.println();
-      #endif
+    bool sentAck = false;
+
+    if (receiverFlags & RX_FLAG_ACK) {
+      // send ack immediately to avoid delays caused by time taken to write to serial port
+      if(RF12_WANTS_ACK){
+        rf12_sendStart(RF12_ACK_REPLY, 0, 0);
+        rf12_sendWait(1);
+        
+        sentAck = true;
+      }
     }
     
     // packet data is a HeatHackData struct
@@ -59,6 +64,8 @@ void loop() {
     
     // check sequence number. If same as last one we saw for this node
     // then data is resent so ignore it.
+    bool isRepeat = false;
+    
     if (data->sequence != lastSequence[node-1]) {
       lastSequence[node-1] = data->sequence;
 
@@ -89,20 +96,20 @@ void loop() {
       Serial.println(); 
     }
     else {
-      #if DEBUG
-        Serial.print("\n\rRepeated sequence id ");
-        Serial.print(data->sequence);
-        Serial.print(" from node ");
-        Serial.println(node);
-      #endif
+      isRepeat = true;
     }
 
     #if DEBUG    
       Serial.print("\n\rData from node ");
       Serial.print(node);
       Serial.print(" seq ");
-      Serial.println(data->sequence);
-        
+      Serial.print(data->sequence);
+
+      if (isRepeat) {        
+        Serial.print(" (repeated sequence id)");
+      }
+      Serial.println();
+      
       for (byte i=0; i<data->numReadings; i++) {
         Serial.print("* sensor ");
         Serial.print(data->readings[i].sensorNumber);
@@ -119,7 +126,11 @@ void loop() {
         }
         Serial.println();
       }
-      Serial.println();
+
+      if (sentAck) {
+        Serial.println("Sent ack");
+        Serial.println();
+      }
     #endif      
   }
 }

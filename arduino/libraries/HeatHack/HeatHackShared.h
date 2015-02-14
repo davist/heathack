@@ -15,7 +15,10 @@ uint8_t myGroupID;      // group ID used for this unit
 uint8_t myInterval;     // interval between transmissions in 10s of secs
 
 #if !defined(__AVR_ATtiny84__)
-// extended epeprom data that's not used by the Micro
+// extended eeprom data that's not used by the Micro
+
+uint8_t portSensor[4];  // type of sensor attached to each port
+uint8_t receiverFlags;
 #endif
 
 
@@ -66,6 +69,50 @@ void serialFlush (void) {
 
 
 /////////////////////////////////////////////////////////////////////
+// sends a test packet and waits for an ack while increasing the
+// transmit power. Returns min level (7-0) at which a response was received.
+uint8_t findMinTransmitPower(void) {
+
+	uint8_t txPower;
+	bool gotAck = false;
+
+	HeatHackData testPacket;
+	testPacket.addReading(0, HHSensorType::TEST, 0);
+	
+    rf12_sleep(RF12_WAKEUP);
+	
+	for (txPower = 7; txPower >= 0 && !gotAck; txPower--) {
+
+		// set radio's transmit power
+		rf12_control(0x9850 | txPower);
+
+		// try twice at each power level
+		for (uint8_t tries = 2, gotAck = false; tries > 0 && !gotAck; tries--) {		
+			rf12_sendNow(RF12_HDR_ACK, &testPacket, testPacket.getTransmitSize());
+			rf12_sendWait(RADIO_SYNC_MODE);
+			gotAck = waitForAck();
+		}
+	}
+
+    rf12_sleep(RF12_SLEEP);
+		
+	return txPower;
+}
+
+/////////////////////////////////////////////////////////////////////
+// sets radio transmit power from 0 max to 7 min
+inline void setTransmitPower(uint8_t power) {
+	rf12_control(0x9850 | (power & 7));
+}
+
+/////////////////////////////////////////////////////////////////////
+// set radio transmit power to maximum (level 0)
+inline void setMaxTransmitPower(void) {
+	rf12_control(0x9850);
+}
+
+
+/////////////////////////////////////////////////////////////////////
 // periodic report, i.e. send out a packet and optionally report on serial port
 inline void doReport(void) {
     #if DEBUG  
@@ -102,6 +149,7 @@ inline void doReport(void) {
       if (retry != 0) {
         // delay before any retry
         Sleepy::loseSomeTime(RETRY_PERIOD);
+		dataPacket.isRetransmit = true;
       }
       
       // send the data and wait for an acknowledgement
@@ -189,7 +237,16 @@ inline void readEeprom(void) {
   if (myInterval < INTERVAL_MIN || myInterval > INTERVAL_MAX) myInterval= DEFAULT_INTERVAL;
   
   #if !defined(__AVR_ATtiny84__)
-	// extended epeprom data that's not used by the Micro
+	// extended eeprom data that's not used by the Micro
+	portSensor[0] = eeprom_read_byte(EEPROM_PORT1);
+	portSensor[1] = eeprom_read_byte(EEPROM_PORT2);
+	portSensor[2] = eeprom_read_byte(EEPROM_PORT3);
+	portSensor[3] = eeprom_read_byte(EEPROM_PORT4);
+	receiverFlags = eeprom_read_byte(EEPROM_RX_FLAGS);
+	
+	for (uint8_t i=0; i<=3; i++) {
+		if (portSensor[i] < SENSOR_MIN || portSensor[i] > SENSOR_MAX) portSensor[i] = SENSOR_AUTO;
+	}
   #endif
 }
 
@@ -201,7 +258,12 @@ inline void writeEeprom(void) {
   eeprom_update_byte(EEPROM_INTERVAL, myInterval);
   
   #if !defined(__AVR_ATtiny84__)
-	// extended epeprom data that's not used by the Micro
+	// extended eeprom data that's not used by the Micro
+	eeprom_update_byte(EEPROM_PORT1, portSensor[0]);
+	eeprom_update_byte(EEPROM_PORT2, portSensor[1]);
+	eeprom_update_byte(EEPROM_PORT3, portSensor[2]);
+	eeprom_update_byte(EEPROM_PORT4, portSensor[3]);
+	eeprom_update_byte(EEPROM_RX_FLAGS, receiverFlags);
   #endif
 }
 
