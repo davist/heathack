@@ -102,6 +102,8 @@
 #define SENSOR_MIN 1
 #define SENSOR_MAX 4
 
+#define RECEIVER_NODE_ID 1
+
 /**
  * Default values and ranges for eeprom data
  */
@@ -229,8 +231,8 @@ struct HHReading {
 #define HH_MAX_READINGS 21
 
 struct HeatHackData {
-	bool isRetransmit : 1;
-	byte numReadings : 4;
+//	bool isRetransmit : 1;
+	byte numReadings : 5;
 	byte sequence : 3;
 	HHReading readings[HH_MAX_READINGS];
 
@@ -240,7 +242,7 @@ struct HeatHackData {
 			readings[i].clear();
 		}
 		numReadings = 0;
-		isRetransmit = false;
+		//isRetransmit = false;
 		sequence++;
 	}
 	

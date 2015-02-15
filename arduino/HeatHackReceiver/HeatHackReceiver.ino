@@ -3,6 +3,7 @@
 
 #include <JeeLib.h>
 #include <HeatHack.h>
+#include <HeatHackShared.h>
 
 // holds last seen sequence number for each node
 byte lastSequence[30];
@@ -16,21 +17,24 @@ void setup() {
   
   Serial.println("JeeNode HeatHack Receiver");
 
+  configConsole();
+
+  Serial.println();  
   Serial.print("Using group id ");
   Serial.print(myGroupID);
   Serial.print(" and node id ");
-  Serial.println(myNodeID);
-  Serial.println();
+  Serial.println(RECEIVER_NODE_ID);
   
   if (receiverFlags & RX_FLAG_ACK) {
-    Serial.print("Acknowledgements enabled (this is the main receiver)");
+    Serial.println("Acknowledgements enabled (this is the main receiver)");
   }
   else {
-    Serial.print("Acknowledgements disabled (this is a secondary receiver - listening only)");
+    Serial.println("Acknowledgements disabled (this is a secondary receiver - listening only)");
   }
+  Serial.println();  
   
   // initialise transceiver
-  rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
+  rf12_initialize(RECEIVER_NODE_ID, RF12_868MHZ, myGroupID);
   
   // init lastSequences to unused values
   for (byte i=0; i<30; i++) {
@@ -99,7 +103,7 @@ void loop() {
       isRepeat = true;
     }
 
-    #if DEBUG    
+    if (receiverFlags & RX_FLAG_VERBOSE) {
       Serial.print("\n\rData from node ");
       Serial.print(node);
       Serial.print(" seq ");
@@ -131,6 +135,6 @@ void loop() {
         Serial.println("Sent ack");
         Serial.println();
       }
-    #endif      
+    }
   }
 }
