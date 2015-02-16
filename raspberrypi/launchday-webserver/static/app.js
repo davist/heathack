@@ -1,7 +1,7 @@
 $(window).load(function() {
 
 refreshData();
-setInterval( refreshData, 1000 );
+setInterval( refreshData, 5000 );
 
 });
 
@@ -23,7 +23,7 @@ function updateCurrent(data) {
 
 	dom.empty();
 
-	$.each(data, function(nodeid, node) {
+	$.each(data.nodes, function(nodeid, node) {
 	
 		var nodeDiv = $("<div/>", {
 			"class": "node-current"
@@ -43,7 +43,7 @@ function updateCurrent(data) {
 
 			$("<span/>", {
 				"class": "reading",
-				"html" : sensor.readings[sensor.lastTime]
+				"html" : sensor.readings[sensor.lastReading]
 			}).appendTo(nodeDiv);
 
 			$("<span/>", {
@@ -67,7 +67,7 @@ function updateHistory(data) {
 
 	dom.empty();
 
-	$.each(data, function(nodeid, node) {
+	$.each(data.nodes, function(nodeid, node) {
 	
 		var nodeDiv = $("<div/>", {
 			"class": "node-history"
@@ -92,22 +92,22 @@ function updateHistory(data) {
 			var unit = SensorType[sensor.type].unit;
 			var divisor = SensorType[sensor.type].maximum / 150;
 
-			function renderReading(sec) {
-				var height = Math.floor(sensor.readings[sec] / divisor);
+			function renderReading(index) {
+				var height = Math.floor(sensor.readings[index] / divisor);
 	
 				$("<div/>", {
 					"class": "reading",
-					"title": sensor.readings[sec] + " " + unit,
+					"title": sensor.readings[index] + " " + unit,
 					"style": "height: " + height + "px"
 				}).appendTo(sensorDiv);
 			}
 
-			for (var sec= sensor.lastTime+1; sec<60; sec++) {
-				renderReading(sec);
+			for (var index= sensor.lastReading+1; index < node.maxReadings; sec++) {
+				renderReading(index);
 			}
 
-			for (var sec= 0; sec<=sensor.lastTime; sec++) {
-				renderReading(sec);
+			for (var index= 0; index<=sensor.lastReading; index++) {
+				renderReading(index);
 			}
 		});
 
@@ -119,8 +119,8 @@ function updateHistory(data) {
 
 SensorType = {
 
-0: {name: "Undefined", unit: "", maximum: 0},
-1: {name: "Temperature", unit: "C", maximum: 50},
+0: {name: "Test", unit: "", maximum: 0},
+1: {name: "Temperature", unit: "C", maximum: 30},
 2: {name: "Humidity", unit: "%", maximum: 100},
 3: {name: "Light", unit: "", maximum: 255},
 4: {name: "Movement", unit: "", maximum: 1},
