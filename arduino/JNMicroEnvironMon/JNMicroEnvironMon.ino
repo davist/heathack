@@ -13,14 +13,14 @@
  * Config console
  * --------------
  * The group id, node id and transmit interval can be altered without reprogramming by
- * attaching a BlinkPlug and serial terminal. If a BlinkPlug isn't available, 2 push buttons
+ * attaching the Configurator and serial terminal. If the Configurator isn't available, 2 push buttons
  * on a breadboard can be used, or even just 2 wires touched to ground!
  *
- * Remove any sensor plug that's attached to the Micro and fit the BlinkPlug. It may be
- * simpler to fit the BlinkPlug on a breadboard and run connectors to the Micro.
- * Alternatively, connect wires to the DIO, AIO and GND pins. Touch AIO to GND for one button,
+ * Remove any sensor plug that's attached to the Micro and fit the Configurator. Attach the
+ * cable to an FTDI serial port (eg USB BUB).
+ * Alternatively, connect wires to the DIO, AIO, RX and GND pins. Touch AIO to GND for one button,
  * and DIO to GND for the other.
- * To enable config mode, connect RX to GND.
+ * To enter config mode at startup, connect RX to GND.
  *
  * Connect TX on the Micro to RX on the serial adapter (eg USB BUB). Connect +3V and GND
  * to the respective pins on the serial connector (VCC and GND on a BUB).
@@ -41,7 +41,7 @@
  *
  * Reset the Micro again and check that it shows the correct settings.
  *
- * Remove the serial connection and buttons and reattach the sensors.
+ * Remove the Configurator and reattach the sensor.
  */
 
 // To use debug you will need to disable one of the sections below (DHT, DS18B or CONFIG_CONSOLE support)

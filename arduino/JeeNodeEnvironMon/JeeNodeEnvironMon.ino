@@ -269,6 +269,8 @@ void setup() {
   
   Serial.println("JeeNode HeatHack Environment Monitor");
 
+  configConsole();
+
   Serial.print("Using group id ");
   Serial.print(myGroupID);
   Serial.print(" and node id ");
