@@ -29,12 +29,42 @@ border-radius: 0 10px 10px 10px;
 .node-current, .node-history {
 background-color: cornsilk;
 padding:10px;
+margin:2px;
 border-radius: 5px;
 box-shadow: 4px 4px 5px rgba(0,0,0,0.5);
 }
 
+.node-current {
+display: inline-block;
+vertical-align:top;
+}
+
 .node-current span {
-margin: 5px;
+margin: 0 5px;
+}
+
+.node-current span.sensortype {
+display:inline-block;
+min-width:55px;
+}
+
+.node-current .sensor {
+display: block;
+}
+
+@keyframes flash-red {
+    from {background: transparent;}
+    to {background: red;}
+}
+
+@-webkit-keyframes flash-red {
+    from {background: transparent;}
+    to {background: red;}
+}
+
+.node-current .sensor.warning {
+-webkit-animation: flash-red 2s infinite alternate;
+animation: flash-red 2s infinite alternate;
 }
 
 .node-current .nodeid {
@@ -42,34 +72,41 @@ font-size: 120%;
 font-weight: bold;
 }
 
-.node-current .sensortype {
-margin-left: 15px;
-}
-
 .node-current .unit {
 margin-left: 0;
 }
 
 .node-history h3 {
+margin: 0;
 margin-top: 2px;
+display: inline-block;
+vertical-align: top;
 }
 
 .sensor-history {
-margin-bottom: 20px;
-height: 155px;
-line-height: 185px;
+display: inline-block;
 overflow: hidden;
 }
 
 .node-history .sensortype {
 display: inline-block;
-width: 150px;
-vertical-align: 4px;
+vertical-align: bottom;
+margin-right: 5px;
 }
 
 .node-history .reading {
 display:inline-block;
-width:24px;
+width:35px;
 margin-right: 1px;
 background-color: red;
+vertical-align: bottom;
+font-size: 60%;
+position:relative;
+}
+
+.node-history .reading span {
+position:absolute;
+bottom:0;
+padding-left: 3px;
+color:white;
 }
