@@ -37,7 +37,7 @@
 #define PIR_PORT    3   // motion detector
 
 // LCD display
-//#define LCD_PORT 3
+//#define LCD_PORT 1
 
 
 #include <JeeLib.h>
@@ -125,7 +125,7 @@
         
         void enableInterrupt(void) {
           #if DEBUG
-            Serial.println("enabling PIR interrupts");
+            Serial.println(F("enabling PIR interrupts"));
             serialFlush();
           #endif
 
@@ -135,7 +135,7 @@
         
         void disableInterrupt(void) {
           #if DEBUG
-            Serial.println("disabling PIR interrupts");
+            Serial.println(F("disabling PIR interrupts"));
             serialFlush();
           #endif
 
@@ -243,13 +243,13 @@ void displayReadingsOnLCD(void) {
     }
 
     lcd.print(dataPacket.readings[i].sensorNumber);
-    lcd.print(":");
+    lcd.print(F(":"));
     lcd.print(dataPacket.readings[i].getIntPartOfReading());
 
     uint8_t decimal = dataPacket.readings[i].getDecPartOfReading();        
     if (decimal != NO_DECIMAL) {
       // display as decimal value to 1 decimal place
-      lcd.print(".");
+      lcd.print(F("."));
       lcd.print(decimal);
     }
     lcd.print(HHSensorUnitNames[dataPacket.readings[i].sensorType]);
@@ -265,71 +265,80 @@ void setup() {
 
   readEeprom();
 
+  uint8_t mins, secs;
+
+  #if LCD_PORT
+    lcd.noBacklight();
+
+    mins = myInterval / 6;
+    secs = (myInterval % 6) * 10;
+
+    lcd.begin(LCD_WIDTH, LCD_HEIGHT);
+    lcd.print(F("HeatHack E-Mon"));
+    lcd.setCursor(0,1);
+    lcd.print(F("G:"));
+    lcd.print(myGroupID);
+    lcd.print(F(" N:"));
+    lcd.print(myNodeID);
+    lcd.print(F(" I:"));
+    if (mins != 0) {
+      lcd.print(mins);
+      lcd.print(F("m"));
+    }
+    else {
+      lcd.print(secs);
+      lcd.print(F("s"));
+    }      
+  #endif
+  
   Serial.begin(BAUD_RATE);
   
-  Serial.println("JeeNode HeatHack Environment Monitor");
+  Serial.println(F("JeeNode HeatHack Environment Monitor"));
 
   configConsole();
 
-  Serial.print("Using group id ");
+  Serial.print(F("Using group id "));
   Serial.print(myGroupID);
-  Serial.print(" and node id ");
+  Serial.print(F(" and node id "));
   Serial.print(myNodeID);
   Serial.println();
-  Serial.print("Transmit interval is ");
-  uint8_t mins = myInterval / 6;
-  uint8_t secs = (myInterval % 6) * 10;
+  Serial.print(F("Transmit interval is "));
+  mins = myInterval / 6;
+  secs = (myInterval % 6) * 10;
   switch (mins) {
     case 0:
       break;
     case 1:
-      Serial.print("1 minute");
+      Serial.print(F("1 minute"));
       break;
     default:
       Serial.print(mins);
-      Serial.print(" minutes");
+      Serial.print(F(" minutes"));
   }
   
   if (secs != 0) {
-    if (mins != 0) Serial.print(" and ");
+    if (mins != 0) Serial.print(F(" and "));
       Serial.print(secs);
-      Serial.print(" seconds");    
+      Serial.print(F(" seconds"));    
   }
   Serial.println();
   Serial.println();
   serialFlush();
 
   #if LCD_PORT
-    Serial.print("* LCD on port ");
+    Serial.print(F("* LCD on port "));
     Serial.print(LCD_PORT);
     Serial.println();
-    serialFlush();
-    
-    lcd.begin(LCD_WIDTH, LCD_HEIGHT);
-    lcd.print("HeatHack E-Mon");
-    lcd.setCursor(0,1);
-    lcd.print("G:");
-    lcd.print(myGroupID);
-    lcd.print(" N:");
-    lcd.print(myNodeID);
-    lcd.print(" I:");
-    if (mins != 0) {
-      lcd.print(mins);
-      lcd.print("m");
-    }
-    else {
-      lcd.print(secs);
-      lcd.print("s");
-    }      
+    serialFlush();    
   #endif
 
   #if DS18B_PORT
 
     ds18bNumDevices = ds18b.init();
 
-    Serial.print("* DS18B on port ");
+    Serial.print(F("* DS18B on port "));
     Serial.print(DS18B_PORT);
-    Serial.print(". Number of sensors: ");
+    Serial.print(F(". Number of sensors: "));
     Serial.print(ds18bNumDevices);
     Serial.println();
     serialFlush();
@@ -339,11 +348,11 @@ void setup() {
 
     dht.init();
 
-    Serial.print("* DHT on port ");
+    Serial.print(F("* DHT on port "));
     Serial.print(DHT_PORT);
-    Serial.print(". Type: ");
+    Serial.print(F(". Type: "));
     if (dht.getType() == 0) {
-      Serial.print("no device present");
+      Serial.print(F("no device present"));
     }
     else {
       Serial.print(dht.getType());
@@ -353,14 +362,14 @@ void setup() {
   #endif
 
   #if HYT131_PORT
-    Serial.print("* HYT131 on port ");
+    Serial.print(F("* HYT131 on port "));
     Serial.print(HYT131_PORT);
     Serial.println();  
     serialFlush();
   #endif
 
   #if LDR_PORT
-    Serial.print("* LDR on port ");
+    Serial.print(F("* LDR on port "));
     Serial.print(LDR_PORT);
     Serial.println();
     serialFlush();
@@ -369,17 +378,13 @@ void setup() {
   #if PIR_PORT
     pir.digiWrite(PIR_PULLUP);
 
-    Serial.print("* PIR on port ");
+    Serial.print(F("* PIR on port "));
     Serial.print(PIR_PORT);
     Serial.println();
     serialFlush();
   #endif
   
   serialFlush();
-  
-  #if LCD_PORT
-    lcd.noBacklight();
-  #endif
   
   #if !DEBUG
     Serial.end();

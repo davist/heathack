@@ -253,19 +253,9 @@ void configConsole(void) {
       byte buttonNow = digitalRead(PORT1_DIO);
     
       if (buttonNow != button1State) {
-        #if DEBUG
-          Serial.print("button 1 now ");
-          Serial.println(buttonNow == HIGH ? "HIGH" : "LOW");
-        #endif
-
         button1State = buttonNow;
     
         if (button1State == LOW) {
-          
-          #if DEBUG
-            Serial.println("button 1 pressed");
-          #endif
-          
           // change mode
           configMode++;
           if (configMode == NUM_MODES) configMode = 0;
@@ -279,18 +269,9 @@ void configConsole(void) {
       buttonNow = digitalRead(PORT1_AIO_AS_DIO);
     
       if (buttonNow != button2State) {
-        #if DEBUG
-          Serial.print("button 2 now ");
-          Serial.println(buttonNow == HIGH ? "HIGH" : "LOW");
-        #endif
-
         button2State = buttonNow;
 
         if (button2State == LOW) {      
-          #if DEBUG
-            Serial.println("button 2 pressed");
-          #endif
-          
           // change current setting
           changeCurrentSetting();
           displayCurrentSetting();

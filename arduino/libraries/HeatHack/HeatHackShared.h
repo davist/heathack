@@ -116,20 +116,20 @@ inline void setMaxTransmitPower(void) {
 // periodic report, i.e. send out a packet and optionally report on serial port
 inline void doReport(void) {
     #if DEBUG  
-        Serial.println("--------------------------");
+        Serial.println(F("--------------------------"));
 
         for (byte i=0; i<dataPacket.numReadings; i++) {
-          Serial.print("* sensor ");
+          Serial.print(F("* sensor "));
           Serial.print(dataPacket.readings[i].sensorNumber);
-          Serial.print(": ");
+          Serial.print(F(": "));
           Serial.print(HHSensorTypeNames[dataPacket.readings[i].sensorType]);
-          Serial.print(" ");
+          Serial.print(F(" "));
           Serial.print(dataPacket.readings[i].getIntPartOfReading());
           
           uint8_t decimal = dataPacket.readings[i].getDecPartOfReading();        
           if (decimal != NO_DECIMAL) {
             // display as decimal value to 1 decimal place
-            Serial.print(".");
+            Serial.print(F("."));
             Serial.print(decimal);
           }
           Serial.println();        
@@ -183,9 +183,9 @@ inline void doSleep(void) {
   }
 
   #if DEBUG
-    Serial.print("hibernating: ");
+    Serial.print(F("hibernating: "));
     Serial.println(hibernating ? "true" : "false");
-    Serial.print("delay(ms): ");
+    Serial.print(F("delay(ms): "));
     Serial.println(delayMs);
     serialFlush();
   #endif
@@ -208,9 +208,9 @@ inline void doSleep(void) {
     }
 
     #if DEBUG
-      Serial.print("slept for (ms): ");
+      Serial.print(F("slept for (ms): "));
       Serial.println(sleepMs);
-      Serial.print("new delay(ms): ");
+      Serial.print(F("new delay(ms): "));
       Serial.println(delayMs);
       serialFlush();
     #endif
@@ -219,7 +219,7 @@ inline void doSleep(void) {
   while (delayMs > 16);
   
   #if DEBUG
-    Serial.println("finished sleeping");
+    Serial.println(F("finished sleeping"));
     serialFlush();
   #endif  
 }
@@ -267,6 +267,8 @@ inline void writeEeprom(void) {
   #endif
 }
 
+
+#if !defined(__AVR_ATtiny84__)
 
 /////////////////////////////////////////////////////////////////////
 inline uint8_t readline(char *buffer, uint8_t bufSize)
@@ -323,69 +325,69 @@ inline uint16_t parseInt(char* buf, uint16_t min, uint16_t max) {
 /////////////////////////////////////////////////////////////////////
 void displaySettings(void) {
 	Serial.println();
-	Serial.println("Current settings:");
-	Serial.print(" group id ");
+	Serial.println(F("Current settings:"));
+	Serial.print(F(" group id "));
 	Serial.println(myGroupID);
-	Serial.print(" node id ");
+	Serial.print(F(" node id "));
 	
 	#if RECEIVER_NODE
 		Serial.print(RECEIVER_NODE_ID);
-		Serial.println(" (fixed for receiver)");
+		Serial.println(F(" (fixed for receiver)"));
 	
-		Serial.print(" acknowledgements ");
+		Serial.print(F(" acknowledgements "));
 		Serial.println( (receiverFlags & RX_FLAG_ACK) ? "on" : "off" );
-		Serial.print(" verbose output ");
+		Serial.print(F(" verbose output "));
 		Serial.println( (receiverFlags & RX_FLAG_VERBOSE) ? "on" : "off" );
 	#else
 		Serial.println(myNodeID);
-		Serial.print(" transmit interval ");
+		Serial.print(F(" transmit interval "));
 		Serial.print(myInterval);
-		Serial.println("0 seconds");
+		Serial.println(F("0 seconds"));
 		
 		for (uint8_t port = 0; port <= 3; port++ ) {
-			Serial.print(" port ");
+			Serial.print(F(" port "));
 			Serial.print(port + 1);
-			Serial.print(" ");
+			Serial.print(F(" "));
 			switch (portSensor[port]) {
 
 			case SENSOR_NONE:
-				Serial.println("no sensor");
+				Serial.println(F("no sensor"));
 				break;
 			case SENSOR_AUTO:
-				Serial.println("auto");
+				Serial.println(F("auto"));
 				break;
 			case SENSOR_LDR:
-				Serial.println("LDR (light sensor)");
+				Serial.println(F("LDR (light sensor)"));
 				break;
 			case SENSOR_PULSE:
-				Serial.println("pulse");
+				Serial.println(F("pulse"));
 				break;
 			default:
-				Serial.println("[invalid value]");
+				Serial.println(F("[invalid value]"));
 				break;					
 			}
 		}
 	#endif
 	
 	Serial.println();
-	Serial.println("Commands:");
-	Serial.println(" h - show settings and commands (help)");
-	Serial.println(" w - write changed settings to EEPROM (make them permanent)");	
-	Serial.println(" x - exit config mode");
-	Serial.println(" g<nnn> - set group id. Valid values: 200 - 212");
+	Serial.println(F("Commands:"));
+	Serial.println(F(" h - show settings and commands (help)"));
+	Serial.println(F(" w - write changed settings to EEPROM (make them permanent)"));	
+	Serial.println(F(" x - exit config mode"));
+	Serial.println(F(" g<nnn> - set group id. Valid values: 200 - 212"));
 
 	#if RECEIVER_NODE
-	Serial.println(" a<0/1> - turn acks on or off. Valid values: 0 - off, 1 - on");
-	Serial.println(" v<0/1> - turn verbose output on or off. Valid values: 0 - off, 1 - on");
+	Serial.println(F(" a<0/1> - turn acks on or off. Valid values: 0 - off, 1 - on"));
+	Serial.println(F(" v<0/1> - turn verbose output on or off. Valid values: 0 - off, 1 - on"));
 
 	#else
-	Serial.println(" n<nn> - set node id. Valid values: 2 - 30");
-	Serial.println(" i<nnn> - set interval. Valid values: multiples of 10 from 10 to 2550");
-	Serial.println(" p<n> <s> - set port n to sensor type s. Valid values: 1-4 for port,");
-	Serial.println("            sensor: 1 - none, 2 - auto, 3 - ldr, 4 - pulse");	
-	Serial.println(" s - test sensors on all ports and report readings");
-	Serial.println(" s<n> - test sensor on port n and report reading");
-	Serial.println(" t - send a test radio packet");
+	Serial.println(F(" n<nn> - set node id. Valid values: 2 - 30"));
+	Serial.println(F(" i<nnn> - set interval. Valid values: multiples of 10 from 10 to 2550"));
+	Serial.println(F(" p<n> <s> - set port n to sensor type s. Valid values: 1-4 for port,"));
+	Serial.println(F("            sensor: 1 - none, 2 - auto, 3 - ldr, 4 - pulse"));	
+	Serial.println(F(" s - test sensors on all ports and report readings"));
+	Serial.println(F(" s<n> - test sensor on port n and report reading"));
+	Serial.println(F(" t - send a test radio packet"));
 	#endif
 
 	Serial.println();
@@ -407,7 +409,7 @@ void parseCommand(char *buffer, uint8_t len) {
 	case 'g':
 		if (len > 1) {
 			myGroupID = parseInt(&buffer[1], GROUP_MIN, GROUP_MAX);
-			Serial.print("Group id set to ");
+			Serial.print(F("Group id set to "));
 			Serial.println(myGroupID);
 		}
 		break;
@@ -415,7 +417,7 @@ void parseCommand(char *buffer, uint8_t len) {
 	case 'n':
 		if (len > 1) {
 			myNodeID = parseInt(&buffer[1], NODE_MIN, NODE_MAX);
-			Serial.print("Node id set to ");
+			Serial.print(F("Node id set to "));
 			Serial.println(myNodeID);
 		}
 		break;
@@ -423,7 +425,7 @@ void parseCommand(char *buffer, uint8_t len) {
 	case 'i':
 		if (len > 1) {
 			myInterval = parseInt(&buffer[1], INTERVAL_MIN * 10, INTERVAL_MAX * 10) / 10;
-			Serial.print("Interval set to ");
+			Serial.print(F("Interval set to "));
 			Serial.println(myInterval * 10);
 		}
 		break;
@@ -438,7 +440,7 @@ void parseCommand(char *buffer, uint8_t len) {
 			else {
 				receiverFlags &= (0xFF - RX_FLAG_ACK);
 			}
-			Serial.print("Acknowledgements set to ");
+			Serial.print(F("Acknowledgements set to "));
 			Serial.println( (receiverFlags & RX_FLAG_ACK) ? "on" : "off" );
 		}
 		break;
@@ -451,7 +453,7 @@ void parseCommand(char *buffer, uint8_t len) {
 			else {
 				receiverFlags &= (0xFF - RX_FLAG_VERBOSE);
 			}
-			Serial.print("Verbose output set to ");
+			Serial.print(F("Verbose output set to "));
 			Serial.println( (receiverFlags & RX_FLAG_VERBOSE) ? "on" : "off" );
 		}
 		break;	
@@ -463,21 +465,21 @@ void parseCommand(char *buffer, uint8_t len) {
 			uint8_t port = parseInt(&buffer[1], 1, 4) - 1;
 			uint8_t sensorType = parseInt(&buffer[3], SENSOR_MIN, SENSOR_MAX);
 			portSensor[port] = sensorType;
-			Serial.print("Port ");
+			Serial.print(F("Port "));
 			Serial.print(port + 1);
-			Serial.print(" set to ");
+			Serial.print(F(" set to "));
 			switch (sensorType) {
 			case SENSOR_NONE:
-				Serial.println("none");
+				Serial.println(F("none"));
 				break;
 			case SENSOR_AUTO:
-				Serial.println("auto");
+				Serial.println(F("auto"));
 				break;
 			case SENSOR_LDR:
-				Serial.println("LDR");
+				Serial.println(F("LDR"));
 				break;
 			case SENSOR_PULSE:
-				Serial.println("pulse");
+				Serial.println(F("pulse"));
 				break;
 			}
 		}
@@ -493,14 +495,14 @@ void configConsole(void) {
 
 	// wait and see if user wants to enter config
 	Serial.println();
-	Serial.println("Press 'c' to enter config mode, any other key to skip");
+	Serial.println(F("Press 'c' to enter config mode, any other key to skip"));
 	serialFlush();
 	
 	uint32_t start = millis();
 	bool enterConfig = false;
 	
 	for (uint8_t secs=5; secs > 0; secs--) {
-		Serial.print("\r");
+		Serial.print(F("\r"));
 		Serial.print(secs);
 		while (millis() - start < 1000) {
 			int key = Serial.read();
@@ -525,7 +527,7 @@ void configConsole(void) {
 		uint8_t len;
 		
 		while (buffer[0] != 'x') {
-			Serial.print("->");
+			Serial.print(F("->"));
 			serialFlush();
 
 			// wait for a command
@@ -539,8 +541,9 @@ void configConsole(void) {
 	}
 	
 	Serial.println();
-	Serial.println("Entering run mode");
+	Serial.println(F("Entering run mode"));
 }
+#endif
 
 #endif
 
