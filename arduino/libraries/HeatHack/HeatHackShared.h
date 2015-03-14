@@ -1,7 +1,9 @@
 #ifndef HEATHACK_SHARED_H
 #define HEATHACK_SHARED_H
 
+#include <Arduino.h>
 #include <HeatHack.h>
+#include <HeatHackSensors.h>
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
 
@@ -9,16 +11,18 @@
 // Functions and variables shared between standard and micro Jeenodes
 /////////////////////////////////////////////////////////////////////
 
+
+
 // variables populated from EEPROM settings
-uint8_t myNodeID;       // node ID used for this unit
-uint8_t myGroupID;      // group ID used for this unit
-uint8_t myInterval;     // interval between transmissions in 10s of secs
+static uint8_t myNodeID;       // node ID used for this unit
+static uint8_t myGroupID;      // group ID used for this unit
+static uint8_t myInterval;     // interval between transmissions in 10s of secs
 
 #if !defined(__AVR_ATtiny84__)
 // extended eeprom data that's not used by the Micro
 
-uint8_t portSensor[4];  // type of sensor attached to each port
-uint8_t receiverFlags;
+static uint8_t portSensor[4];  // type of sensor attached to each port
+static uint8_t receiverFlags;
 #endif
 
 
@@ -26,14 +30,19 @@ uint8_t receiverFlags;
 ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 
 // time we last received an acknowledgement from the receiver
-uint32_t lastAckTime = 0;
+static uint32_t lastAckTime = 0;
 
 // if not received an ack for a while, hibernating will be true
-bool hibernating = false;
+static bool hibernating = false;
 
-HeatHackData dataPacket;
+static HeatHackData dataPacket;
 
+// default to maximum power
+static uint8_t transmitPower = 0;
 
+// count number of successive times a doReport fails on the initial try and has to retry.
+// If it happens several times then recalc min transmit power
+static uint8_t successiveRetries = 0;
 
 /////////////////////////////////////////////////////////////////////
 // wait a few milliseconds for proper ACK to me, return true if indeed received
@@ -61,10 +70,8 @@ bool waitForAck(void) {
 
 /////////////////////////////////////////////////////////////////////
 void serialFlush (void) {
-    #if ARDUINO >= 100
-        Serial.flush();
-    #endif  
-    delay(10); // make sure tx buf is empty before going back to sleep
+  Serial.flush();
+  delay(10); // make sure tx buf is empty before going back to sleep
 }
 
 
@@ -77,9 +84,11 @@ uint8_t findMinTransmitPower(void) {
 	bool gotAck = false;
 
 	HeatHackData testPacket;
-	testPacket.addReading(0, HHSensorType::TEST, 0);
+  HHReading reading;
+  reading.sensorType = HHSensorType::TEST;
+  testPacket.addReading(reading);
 	
-    rf12_sleep(RF12_WAKEUP);
+  rf12_sleep(RF12_WAKEUP);
 	
 	for (txPower = 7; txPower >= 0 && !gotAck; txPower--) {
 
@@ -146,7 +155,13 @@ inline void doReport(void) {
     byte retry = 0;
 
     do {
-      if (retry != 0) {
+      if (retry == 0) {
+        setTransmitPower(transmitPower);
+      }
+      else {
+        // use maximum power for retries
+        setMaxTransmitPower();
+
         // delay before any retry
         Sleepy::loseSomeTime(RETRY_PERIOD);
 		//dataPacket.isRetransmit = true;
@@ -163,6 +178,20 @@ inline void doReport(void) {
     }
     // if hibernating only send once, otherwise keep resending until ack received or retry limit reached
     while (!acked && !hibernating && retry < RETRY_LIMIT);
+
+    if (acked && retry == 1) {
+      // succeeded on first try
+      successiveRetries = 0;
+    }
+    else {
+      successiveRetries++;
+    }
+
+    if (successiveRetries > SUCCESSIVE_RETRY_THRESHOLD) {
+      transmitPower = findMinTransmitPower();
+      successiveRetries = 0;
+    }
+
 }
 
 
@@ -184,7 +213,7 @@ inline void doSleep(void) {
 
   #if DEBUG
     Serial.print(F("hibernating: "));
-    Serial.println(hibernating ? "true" : "false");
+    Serial.println(hibernating ? F("true") : F("false"));
     Serial.print(F("delay(ms): "));
     Serial.println(delayMs);
     serialFlush();
@@ -395,17 +424,20 @@ void displaySettings(void) {
 
 /////////////////////////////////////////////////////////////////////
 void parseCommand(char *buffer, uint8_t len) {
-	uint16_t num;
-	switch(buffer[0]) {
+
+  switch(buffer[0]) {
+
 	// help
 	case 'h':
 		displaySettings();
 		break;	
-	// write
+
+		// write
 	case 'w':
 		writeEeprom();
 		break;	
-	// group
+
+		// group
 	case 'g':
 		if (len > 1) {
 			myGroupID = parseInt(&buffer[1], GROUP_MIN, GROUP_MAX);
@@ -413,24 +445,9 @@ void parseCommand(char *buffer, uint8_t len) {
 			Serial.println(myGroupID);
 		}
 		break;
-	// node
-	case 'n':
-		if (len > 1) {
-			myNodeID = parseInt(&buffer[1], NODE_MIN, NODE_MAX);
-			Serial.print(F("Node id set to "));
-			Serial.println(myNodeID);
-		}
-		break;
-	// interval
-	case 'i':
-		if (len > 1) {
-			myInterval = parseInt(&buffer[1], INTERVAL_MIN * 10, INTERVAL_MAX * 10) / 10;
-			Serial.print(F("Interval set to "));
-			Serial.println(myInterval * 10);
-		}
-		break;
 	
-	#if RECEIVER_NODE
+	#if defined(RECEIVER_NODE)
+
 	// acks
 	case 'a':
 		if (len > 1) {
@@ -444,6 +461,7 @@ void parseCommand(char *buffer, uint8_t len) {
 			Serial.println( (receiverFlags & RX_FLAG_ACK) ? "on" : "off" );
 		}
 		break;
+
 	// verbose
 	case 'v':
 		if (len > 1) {
@@ -459,6 +477,24 @@ void parseCommand(char *buffer, uint8_t len) {
 		break;	
 	#else
 	
+	// node
+	case 'n':
+		if (len > 1) {
+			myNodeID = parseInt(&buffer[1], NODE_MIN, NODE_MAX);
+			Serial.print(F("Node id set to "));
+			Serial.println(myNodeID);
+		}
+		break;
+
+	// interval
+	case 'i':
+		if (len > 1) {
+			myInterval = parseInt(&buffer[1], INTERVAL_MIN * 10, INTERVAL_MAX * 10) / 10;
+			Serial.print(F("Interval set to "));
+			Serial.println(myInterval * 10);
+		}
+		break;
+
 	// port
 	case 'p':
 		if (len == 4) {
@@ -485,6 +521,38 @@ void parseCommand(char *buffer, uint8_t len) {
 		}
 		break;
 		
+	// test sensors
+	case 's':
+		{
+		Autodetect ad;
+		for (byte p=1; p<=4; p++) {
+			Serial.print(F("Port "));
+			Serial.print(p);
+			Serial.print(F(": "));
+			serialFlush();
+			switch(ad.probePort(p)) {
+				case SENSOR_DHT11:
+					Serial.println(F("DHT11"));
+					break;
+				case SENSOR_DHT22:
+					Serial.println(F("DHT22"));
+					break;
+				case SENSOR_DS18B:
+					Serial.println(F("DS18B20"));
+					break;
+				case SENSOR_HYT131:
+					Serial.println(F("HYT131"));
+					break;
+				case SENSOR_LCD:
+					Serial.println(F("LCD"));
+					break;
+				default:
+					Serial.println(F("None"));
+			}
+		}
+	
+		break;
+		}
 	#endif
 	}
 }

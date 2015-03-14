@@ -32,17 +32,17 @@
 #define DS18B_PORT 4
 
 // room node module
-#define HYT131_PORT 2   // the temp/humidity sensor
-#define LDR_PORT    3   // light sensor
-#define PIR_PORT    3   // motion detector
+//#define HYT131_PORT 2   // the temp/humidity sensor
+//#define LDR_PORT    3   // light sensor
+//#define PIR_PORT    3   // motion detector
 
 // LCD display
 //#define LCD_PORT 1
 
-
-#include <JeeLib.h>
-#include <PortsLCD.h>
-#include <OneWire.h>
+#include <Arduino.h>
+#include "JeeLib.h"
+#include "PortsLCD.h"
+#include "OneWire.h"
 
 #include "HeatHack.h"
 #include "HeatHackSensors.h"
@@ -50,7 +50,7 @@
 
 
 #if DHT_PORT
-  DHT dht(DHT_PORT);
+  DHT dht(DHT_PORT, SENSOR_DHT22);
 #endif
 
 #if DS18B_PORT
@@ -166,35 +166,20 @@ void doMeasure() {
   // format data packet
   dataPacket.clear();
 
-  if (rf12_lowbat()) {
-    dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 1);
-  }
-  else if (firstMeasure) {
-    // send a reading first time even if battery isn't low so that the logger
-    // knows about the sensor and can graph it for when it does start reporting a low batt.
-    dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 0);
+  bool lowBatt = rf12_lowbat();
+  if (lowBatt || firstMeasure) {
+    HHReading reading;
+    reading.sensorType = HHSensorType::LOW_BATT;
+    reading.encodedReading = lowBatt;
+    dataPacket.addReading(reading);
   }
 
 #if DHT_PORT
-  if (dht.reading(temp, humi)) {
-    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
-    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
-  }
+  dht.reading(dataPacket);
 #endif
 
 #if DS18B_PORT
-
-  int16_t temps[3];
-
-  if (ds18bNumDevices > 0) {
-    ds18b.reading(temps);
-    
-    for (uint8_t i=0; i < ds18bNumDevices; i++) {
-      if (temps[i] != DS18B_INVALID_TEMP) {
-        dataPacket.addReading(SENSOR_TEMP2 + i, HHSensorType::TEMPERATURE, temps[i]);
-      }
-    }
-  }
+  ds18b.reading(dataPacket);
 #endif
 
 #if HYT131_PORT
@@ -268,12 +253,12 @@ void setup() {
   uint8_t mins, secs;
 
   #if LCD_PORT
+    lcd.begin(LCD_WIDTH, LCD_HEIGHT);
     lcd.noBacklight();
 
     mins = myInterval / 6;
     secs = (myInterval % 6) * 10;
 
-    lcd.begin(LCD_WIDTH, LCD_HEIGHT);
     lcd.print(F("HeatHack E-Mon"));
     lcd.setCursor(0,1);
     lcd.print(F("G:"));
@@ -334,12 +319,12 @@ void setup() {
 
   #if DS18B_PORT
 
-    ds18bNumDevices = ds18b.init();
+    ds18b.init();
 
     Serial.print(F("* DS18B on port "));
     Serial.print(DS18B_PORT);
     Serial.print(F(". Number of sensors: "));
-    Serial.print(ds18bNumDevices);
+    Serial.print(ds18b.getNumDevices());
     Serial.println();
     serialFlush();
   #endif

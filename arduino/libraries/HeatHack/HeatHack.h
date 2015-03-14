@@ -1,12 +1,7 @@
 #ifndef HEATHACK_H
 #define HEATHACK_H
 
-#if ARDUINO >= 100
-#include <Arduino.h> // Arduino 1.0
-#else
-#include <WProgram.h> // Arduino 0022
-#endif
-
+#include <Arduino.h>
 #include <JeeLib.h>
 
 // The serial port baud rate to use for all HeatHack devices
@@ -95,8 +90,14 @@
 // per-port sensor types
 #define SENSOR_NONE  1   // no sensor attached
 #define SENSOR_AUTO  2   // auto-detect DHT11/22, DS18B20, Room Board with HYT131, LCD display, (or none)
-#define SENSOR_LDR   3   // light-dependent resistor between AIO and GND pins
-#define SENSOR_PULSE 4   // pulsed input on DIO pin (e.g. hall-effect switch or photo-detector for meter reading)
+#define SENSOR_I2C_UNKNOWN 127
+#define SENSOR_DHT11 11
+#define SENSOR_DHT22 22
+#define SENSOR_DS18B 18
+#define SENSOR_HYT131 131
+#define SENSOR_LCD   3
+#define SENSOR_LDR   4   // light-dependent resistor between AIO and GND pins
+#define SENSOR_PULSE 5   // pulsed input on DIO pin (e.g. hall-effect switch or photo-detector for meter reading)
 
 // max sensor type number
 #define SENSOR_MIN 1
@@ -156,6 +157,7 @@
 #define ACK_TIME        10  // number of milliseconds to wait for an ack
 #define RETRY_PERIOD    1000  // how soon to retry if ACK didn't come in
 #define RETRY_LIMIT     5   // maximum number of times to retry
+#define SUCCESSIVE_RETRY_THRESHOLD 4 // number of doReports that must fail on 1st try before recalcing min transmit power
 
 // set the sync mode to 2 if the fuses are still the Arduino default
 // mode 3 (full powerdown) can only be used with 258 CK startup fuses
@@ -193,22 +195,25 @@ namespace HHSensorType {
 
 #define NO_DECIMAL 255
  
-extern char* HHSensorTypeNames[];
-extern char* HHSensorUnitNames[];
+extern const char* HHSensorTypeNames[];
+extern const char* HHSensorUnitNames[];
 extern bool HHSensorTypeIsInt[]; 
  
 struct HHReading {
-	byte sensorType : 4;
-	byte sensorNumber : 4;
+	
+	union {
+		struct {
+			byte portNumber : 2;
+			byte sensorNumber : 2;
+			byte sensorType : 4;
+		};
+		
+		byte header;
+	};
+	
 	int16_t encodedReading;
-	
-	inline void clear() {
-		sensorType = HHSensorType::TEST;
-		sensorNumber = 0;
-		encodedReading = 0;
-	}
-	
-	inline int16_t getIntPartOfReading() {
+
+	int16_t getIntPartOfReading() {
 		if (HHSensorTypeIsInt[sensorType]) {
 			return encodedReading;
 		}
@@ -217,7 +222,7 @@ struct HHReading {
 		}
 	}
 
-	inline uint8_t getDecPartOfReading() {
+	uint8_t getDecPartOfReading() {
 		if (HHSensorTypeIsInt[sensorType]) {
 			return NO_DECIMAL;
 		}
@@ -228,32 +233,29 @@ struct HHReading {
 };
 
 // maximum number of readings that will fit in a data packet
-#define HH_MAX_READINGS 21
+#define HH_MAX_READINGS 13
 
 struct HeatHackData {
-//	bool isRetransmit : 1;
+	//bool isRetransmit : 1;
 	byte numReadings : 5;
 	byte sequence : 3;
 	HHReading readings[HH_MAX_READINGS];
 
 	// clear all previous readings
 	void clear() {
-		for (byte i = 0; i < numReadings; i++) {
-			readings[i].clear();
-		}
 		numReadings = 0;
 		//isRetransmit = false;
 		sequence++;
 	}
-	
+/*	
 	// Add a sensor reading into the packet.
 	// Assumes decimal readings (to 1 decimal place) have been multiplied by 10
 	// to convert to integer.
-	bool addReading(byte sensorNumber, HHSensorType::type type, int16_t value) {
+	bool addReading(byte portNumber, byte sensorNumber, HHSensorType::type type, int16_t value) {
 	
 		if (numReadings < HH_MAX_READINGS) {
-		
 			readings[numReadings].sensorType = type;
+			readings[numReadings].portNumber = portNumber;
 			readings[numReadings].sensorNumber = sensorNumber;
 			readings[numReadings].encodedReading = value;
 			
@@ -265,7 +267,16 @@ struct HeatHackData {
 			return false;
 		}
 	}	
-	
+*/	
+
+	void addReading(HHReading& reading) {
+		if (numReadings < HH_MAX_READINGS) {
+			readings[numReadings].header = reading.header;
+			readings[numReadings].encodedReading = reading.encodedReading;			
+			numReadings++;
+		}	
+	}
+
 	// calculate actual number of bytes in use so we can transmit the minimum
 	// possible instead of the entire struct
 	byte getTransmitSize() {

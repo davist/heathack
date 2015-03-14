@@ -1,1 +1,4 @@
 hardware
+**/.ino.cpp
+**/spec.d
+*/Release

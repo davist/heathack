@@ -46,17 +46,10 @@
 
 // To use debug you will need to disable one of the sections below (DHT, DS18B or CONFIG_CONSOLE support)
 // to free up some memory.
-// Or run the code on a standard Jeenode to do the debugging.
 //#define DEBUG true
 
-
-// Port number for DHT sensor (must be 1 on JNMicro)
-// Comment out to remove the DHT code
-#define DHT_PORT 1
-
-// Dallas DS18B port number (must be 1 on JNMicro)
-// Comment out to remove the DS18B code
-#define DS18B_PORT 1
+#define ENABLE_DHT true
+#define ENABLE_DS18B true
 
 // Enable config console. Comment out to disable.
 #define CONFIG_CONSOLE true
@@ -69,7 +62,7 @@
 #define GROUP_MAX 212
 
 #define NODE_MIN 20
-#define NODE_MAX 30
+#define NODE_MAX 29
 
 #define INTERVAL_MIN 1  // 10 secs min
 #define INTERVAL_MAX 60 // 10 mins max
@@ -77,36 +70,24 @@
 #include <JeeLib.h>
 
 // need to include OneWire here as it won't get picked up from inside HeatHackSensors.h
-#define ONEWIRE_CRC8_TABLE 0
 #include <OneWire.h>
-
-#define DHT_USE_INTERRUPTS false
-#define DHT_USE_I_PIN_FOR_DATA true
-#include "HeatHackSensors.h"
 
 #include "HeatHack.h"
 #include "HeatHackShared.h"
 
+#define DHT_USE_INTERRUPTS false
+#include "HeatHackSensors.h"
 
-#if DHT_PORT
-  DHT dht(DHT_PORT);
+// sensor classes
+#if ENABLE_DHT
+DHT dht(PORT1_DIO, SENSOR_NONE);
 #endif
 
-#if DS18B_PORT
-  DS18B ds18b(DS18B_PORT);
-  uint8_t ds18bNumDevices;
+#if ENABLE_DS18B
+DS18B ds18b(PORT1_DIO);
 #endif
-
-#define SENSOR_LOWBATT  1
-#define SENSOR_TEMP     2
-#define SENSOR_HUMIDITY 3
-#define SENSOR_TEMP2    4  // base for DS18 sensors
 
 enum ConfigMode { GROUP, NODE, INTERVAL, SAVE, NUM_MODES };
-enum SaveState { UNSAVED, SAVED };
-
-uint8_t saveState = UNSAVED;
-uint8_t configMode = GROUP;
 
 
 /////////////////////////////////////////////////////////////////////
@@ -116,111 +97,104 @@ inline void doMeasure(void) {
   // format data packet
   dataPacket.clear();
 
-  if (rf12_lowbat()) {
-    dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 1);
-  }
-  else if (firstMeasure) {
-    // send a reading first time even if battery isn't low so that the logger
-    // knows about the sensor and can graph it for when it does start reporting a low batt.
-    dataPacket.addReading(SENSOR_LOWBATT, HHSensorType::LOW_BATT, 0);
+  // send a reading first time even if battery isn't low so that the logger
+  // knows about the sensor and can graph it for when it does start reporting a low batt.
+  bool lowBatt = rf12_lowbat();
+  if (lowBatt || firstMeasure) {
+    HHReading reading;
+    reading.sensorType = HHSensorType::LOW_BATT;
+    reading.encodedReading = lowBatt;
+    dataPacket.addReading(reading);
   }
 
-#if DHT_PORT
-  int humi, temp;
-
-  if (dht.reading(temp, humi)) {
-    dataPacket.addReading(SENSOR_TEMP, HHSensorType::TEMPERATURE, temp);
-    dataPacket.addReading(SENSOR_HUMIDITY, HHSensorType::HUMIDITY, humi);
-  }
+#if ENABLE_DHT
+  dht.reading(dataPacket);
 #endif
 
-#if DS18B_PORT
-
-  int16_t temps[3];
-
-  if (ds18bNumDevices > 0) {
-    ds18b.reading(temps);
-    
-    for (uint8_t i=0; i < ds18bNumDevices; i++) {
-      if (temps[i] != DS18B_INVALID_TEMP) {
-        dataPacket.addReading(SENSOR_TEMP2 + i, HHSensorType::TEMPERATURE, temps[i]);
-      }
-    }
-  }
+#if ENABLE_DS18B
+  ds18b.reading(dataPacket);
 #endif
 
   firstMeasure = false;
 }
 
 
+static void printGroup(void) {
+  const char* numstr = "00\001\002\003\004\005\006\007\008\009\010\011\012";
+  Serial.write(" g2");
+  Serial.write(numstr + ((myGroupID - 200) * 3));
+}
+
+static void printNode(void) {
+  const char* numstr = "0\01\02\03\04\05\06\07\08\09";
+  Serial.write(" n2");
+  Serial.write(numstr + ((myNodeID - 20) << 1));
+}
+
+static void printInterval(void) {
+  const char* istr = "10\060\0600";
+  const char *curIstr;
+  
+  Serial.write(" i");
+  if (myInterval == 1) curIstr = istr;
+  else if (myInterval == 6) curIstr = istr + 3;
+  else curIstr = istr + 6;
+  Serial.write(curIstr);
+}
+
 /////////////////////////////////////////////////////////////////////
 inline void displaySettings(void) {
-  Serial.println();
-  Serial.print("g");
-  Serial.print(myGroupID, DEC);
-  Serial.print(" n");
-  Serial.print(myNodeID, DEC);
-  Serial.print(" i");
-  Serial.print(myInterval * 10, DEC);
-  Serial.println();
+  Serial.write("\r\n");
+  printGroup();
+  printNode();
+  printInterval();
+  Serial.write("\r\n");
 }
 
 /////////////////////////////////////////////////////////////////////
-void displayCurrentSetting() {
+void displayCurrentSetting(uint8_t configMode) {
 
-  switch (configMode) {
-    case GROUP:
-      Serial.print("\rg");
-      Serial.print(myGroupID, DEC);
-      break;
-    case NODE:
-      Serial.print("\rn");
-      Serial.print(myNodeID, DEC);
-      break;
-    case INTERVAL:
-      Serial.print("\ri");
-      Serial.print(myInterval * 10, DEC);
-      break;
-    case SAVE:
-      Serial.print("\rsave");
-      if (saveState == SAVED) {
-        Serial.print("d");
-      }
-      break;
+  // begin with carriage return to reset cursor to start of line
+  Serial.write("\r");
+  
+  if (configMode == GROUP) {
+    printGroup();
+  }
+  else if (configMode == NODE) {
+    printNode();
+  }
+  else if (configMode == INTERVAL) {
+    printInterval();
+  }
+  else {
+      Serial.write("save");
+  }
+
+  // blank out any left over text from previous setting
+  Serial.write("  ");
+}
+
+/////////////////////////////////////////////////////////////////////
+void changeCurrentSetting(uint8_t configMode) {
+
+  if (configMode == GROUP) {
+    if (myGroupID < GROUP_MAX) myGroupID++;
+    else myGroupID = GROUP_MIN;
   }
   
-  // blank out any left over text from previous setting
-  Serial.print("  ");
-}
-
-/////////////////////////////////////////////////////////////////////
-void changeCurrentSetting() {
-  switch (configMode) {
-    case GROUP:
-      if (myGroupID < GROUP_MAX) myGroupID++;
-      else myGroupID = GROUP_MIN;
-      break;
-    case NODE:
-      if (myNodeID < NODE_MAX) myNodeID++;
-      else myNodeID = NODE_MIN;
-      break;
-    case INTERVAL:
-      switch (myInterval) {
-        case 1:
-          myInterval = 6;
-          break;
-        case 6:
-          myInterval = 60;
-          break;
-        default:
-          myInterval = 1;
-          break;
-      }
-      break;
-    case SAVE:
-      writeEeprom();
-      saveState = SAVED;
-      break;
+  else if (configMode == NODE) {
+    if (myNodeID < NODE_MAX) myNodeID++;
+    else myNodeID = NODE_MIN;
+  }
+  
+  else if (configMode == INTERVAL) {
+    if      (myInterval == 1) myInterval = 6;
+    else if (myInterval == 6) myInterval = 60;
+    else                      myInterval = 1;
+  }
+  
+  else { // SAVE
+    writeEeprom();
   }
 }
 
@@ -233,14 +207,15 @@ void configConsole(void) {
   digitalWrite(PORT1_DIO, HIGH);
   digitalWrite(PORT1_AIO_AS_DIO, HIGH);
   
-  Serial.println("Config");
-  displayCurrentSetting();
-
   byte button1State = LOW;
   byte button2State = LOW;
   uint32_t lastCheckTime = 0;
   const uint32_t DEBOUNCE_TIME = 100;
+  uint8_t configMode = GROUP;
   
+  Serial.write("Config\r\n");
+  displayCurrentSetting(configMode);
+
   while (1) {
 
     uint32_t now = millis();
@@ -258,10 +233,8 @@ void configConsole(void) {
         if (button1State == LOW) {
           // change mode
           configMode++;
-          if (configMode == NUM_MODES) configMode = 0;
-          
-          if (saveState != UNSAVED) saveState = UNSAVED;
-          displayCurrentSetting();
+          if (configMode == NUM_MODES) configMode = 0;          
+          displayCurrentSetting(configMode);
         }
       }
       
@@ -273,8 +246,8 @@ void configConsole(void) {
 
         if (button2State == LOW) {      
           // change current setting
-          changeCurrentSetting();
-          displayCurrentSetting();
+          changeCurrentSetting(configMode);
+          displayCurrentSetting(configMode);
         }
       }
     }
@@ -285,7 +258,7 @@ void configConsole(void) {
 void setup() {
 
   // wait for things to stablise
-  Sleepy::loseSomeTime(1000);
+//  Sleepy::loseSomeTime(1000);
 
 #if defined(__AVR_ATtiny84__)
   cli();
@@ -315,20 +288,43 @@ void setup() {
   }
 #endif
 
-  #if DS18B_PORT
+  bool dhtOnIPin = false;
 
-    ds18bNumDevices = ds18b.init();
+#if ENABLE_DHT && ENABLE_DS18B
+  // check for a OneWire bus (DS18B20 sensors) on D pin
+  OneWire oneWire;
+  oneWire.init(PORT1_DIO);
 
-    #if DEBUG
-      Serial.print("#DS18: ");
-      Serial.print(ds18bNumDevices, DEC);
-      Serial.println();
-    #endif
+  DeviceAddress ds18Addr;
+
+  if (oneWire.search(ds18Addr) &&
+    oneWire.crc8(ds18Addr, 7) == ds18Addr[7]) {
+
+    // found DS18B on D pin
+    ds18b.init();
+
+    // setup DHT on I pin
+    dhtOnIPin = true;
+  }
+  else {
+    // assume DHT is on D pin
+    dhtOnIPin = false;
+  }
+#elif ENABLE_DHT
+  dhtOnIPin = false;
+#else
+  ds18b.init();
+
+  #if DEBUG
+    Serial.print("#DS18: ");
+    Serial.print(ds18b.getNumDevices(), DEC);
+    Serial.println();
   #endif
 
-  #if DHT_PORT    
+#endif
 
-    dht.init();
+  #if ENABLE_DHT
+    dht.init(dhtOnIPin);
 
     #if DEBUG
       Serial.print("DHT: ");
@@ -336,7 +332,7 @@ void setup() {
       Serial.println();
     #endif
   #endif
-  
+
   serialFlush();
 
   #if !DEBUG
@@ -352,6 +348,8 @@ void setup() {
   // initialise transmitter
   rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
   rf12_control(0xC040); // set low-battery level to 2.2V instead of 3.1V
+
+  transmitPower = findMinTransmitPower();
 
   // power down
   rf12_sleep(RF12_SLEEP);

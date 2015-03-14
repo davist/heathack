@@ -35,8 +35,11 @@
 // about 250 bytes.  It does NOT consume RAM (but did in very
 // old versions of OneWire).  If you disable this, a slower
 // but very compact algorithm is used.
+
 #ifndef ONEWIRE_CRC8_TABLE
-#define ONEWIRE_CRC8_TABLE 1
+  #if !defined(__AVR_ATtiny84__)
+    #define ONEWIRE_CRC8_TABLE 1
+  #endif
 #endif
 
 // You can allow 16-bit CRC checks by defining this to 1

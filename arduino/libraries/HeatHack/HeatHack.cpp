@@ -1,6 +1,6 @@
 #include "HeatHack.h"
 
-char* HHSensorTypeNames[] = {
+const char* HHSensorTypeNames[] = {
 	"Test",
 	"Temperature",
 	"Humidity",
@@ -11,7 +11,7 @@ char* HHSensorTypeNames[] = {
     "Low Battery"
 };
 
-char* HHSensorUnitNames[] = {
+const char* HHSensorUnitNames[] = {
 	"X",
 	"C",
 	"%",

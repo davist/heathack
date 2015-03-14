@@ -211,6 +211,7 @@ public:
 /// Can be used to drive a software (bit-banged) I2C bus via a Port interface.
 /// @todo Speed up the I2C bit I/O, it's far too slow right now.
 class PortI2C : public Port {
+protected:
     uint8_t uswait;
 #if 0
 // speed test with fast hard-coded version for Port 1:

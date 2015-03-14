@@ -1330,7 +1330,7 @@ void InputParser::poll() {
         case ':':   (word&) buffer[fill] = value;
                     fill += 2;
                     value >>= 16;
-                    // fall through
+                    /* no break */
         case '.':   (word&) buffer[fill] = value;
                     fill += 2;
                     hasvalue = 0;
@@ -1340,7 +1340,7 @@ void InputParser::poll() {
                     return;
         case ' ':   if (!hasvalue)
                         return;
-                    // fall through
+                    /* no break */
         case ',':   buffer[fill++] = value;
                     hasvalue = 0;
                     return;

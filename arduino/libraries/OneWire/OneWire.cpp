@@ -453,7 +453,11 @@ uint8_t OneWire::search(uint8_t *newAddr)
       LastFamilyDiscrepancy = 0;
       search_result = FALSE;
    }
-   for (int i = 0; i < 8; i++) newAddr[i] = ROM_NO[i];
+   
+   if (newAddr) {
+	  for (int i = 0; i < 8; i++) newAddr[i] = ROM_NO[i];
+   }
+   
    return search_result;
   }
 
