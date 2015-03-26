@@ -1,0 +1,106 @@
+[Version]
+Product,2
+File,16
+{
+"Config" : {
+  "NetImportFormat" : "Protel"
+},
+"Board" : {
+  "Width" : 7,
+  "Height" : 6,
+  "Pattern" : "Strip"
+},
+"CelledOutlines" : [
+  { "Name" : "SIP6", "Locked" : false,
+    "Rows" : [
+    [{"Pin" : "1"}],
+    [{"Pin" : "2"}],
+    [{"Pin" : "3"}],
+    [{"Pin" : "4"}],
+    [{"Pin" : "5"}],
+    [{"Pin" : "6"}]
+    ]
+  },
+  { "Name" : "package name for PCB layout", "Locked" : false,
+    "Rows" : [
+    ["Body","Free","Body"],
+    ["Body","Body","Body"]
+    ]
+  },
+  { "Name" : "SIP1", "Locked" : false,
+    "Rows" : [
+    [{"Pin" : "1"}]
+    ]
+  }
+],
+"LeadedOutlines" : [
+  { "Name" : "AX3_1N", "Locked" : false,
+    "BodyLength" : 3, "BodyWidth" : 1,
+    "Pin0Name" : "1", "Pin1Name" : "2", "ShowReference" : false
+  }
+],
+"RadialOutlines" : [
+],
+"CustomOutlines" : [
+],
+"SmdOutlines" : [
+],
+"Components" : [
+  { "Designator" : "J1", "Value" : "JeeNode Port", "Outline" : "SIP6",
+  "X1000" : 6000, "Y1000" : 5000, "EndDeltaX" : 0, "EndDeltaY" : -1,
+  "Text" : { "X" : 1, "Y" : 5, "Angle" : 0, "Visible" : true },
+  "Group" : 0
+  },
+  { "Designator" : "R1", "Value" : "4K7", "Outline" : "AX3_1N",
+  "X1000" : 5000, "Y1000" : 1000, "EndDeltaX" : 0, "EndDeltaY" : 3,
+  "Text" : { "X" : 0, "Y" : 1, "Angle" : 0, "Visible" : true },
+  "Group" : 0
+  },
+  { "Designator" : "C1", "Value" : "0.1uF", "Outline" : "package name for PCB layout",
+  "X1000" : 4000, "Y1000" : 5000, "EndDeltaX" : 1, "EndDeltaY" : 0,
+  "Text" : { "X" : 1, "Y" : 0, "Angle" : 0, "Visible" : true },
+  "Group" : 0
+  },
+  { "Designator" : "IC1.1", "Value" : "+", "Outline" : "SIP1",
+  "X1000" : 0, "Y1000" : 5000, "EndDeltaX" : 0, "EndDeltaY" : 1,
+  "Text" : { "X" : 2, "Y" : 0, "Angle" : 0, "Visible" : true },
+  "Group" : 0
+  },
+  { "Designator" : "IC1.2", "Value" : "D", "Outline" : "SIP1",
+  "X1000" : 1000, "Y1000" : 4000, "EndDeltaX" : 0, "EndDeltaY" : 1,
+  "Text" : { "X" : 0, "Y" : -1, "Angle" : 0, "Visible" : true },
+  "Group" : 0
+  },
+  { "Designator" : "IC1.4", "Value" : "G", "Outline" : "SIP1",
+  "X1000" : 3000, "Y1000" : 3000, "EndDeltaX" : 0, "EndDeltaY" : 1,
+  "Text" : { "X" : -1, "Y" : -1, "Angle" : 0, "Visible" : true },
+  "Group" : 0
+  }
+],
+"Links" : [
+  { "X" : 2, "Y" : 1, "EndDeltaX" : 0, "EndDeltaY" : 4, "Group" : 0 }
+],
+"Breaks" : [
+  { "X" : 5, "Y" : 5, "Shift" : "none", "Group" : 0 }
+],
+"Wires" : [
+],
+"Nets" : [
+    { "Node" : "N000000", "Components" : [
+    { "Name" : "C1", "Pins" : ["1"] },
+    { "Name" : "IC1.1", "Pins" : ["1"] },
+    { "Name" : "J1", "Pins" : ["5"] },
+    { "Name" : "R1", "Pins" : ["1"] }
+    ] },
+    { "Node" : "N000001", "Components" : [
+    { "Name" : "IC1.2", "Pins" : ["1"] },
+    { "Name" : "J1", "Pins" : ["2"] },
+    { "Name" : "R1", "Pins" : ["2"] }
+    ] },
+    { "Node" : "N000002", "Components" : [
+    { "Name" : "C1", "Pins" : ["2"] },
+    { "Name" : "IC1.4", "Pins" : ["1"] },
+    { "Name" : "J1", "Pins" : ["3"] }
+    ] }
+]
+}
