@@ -43,8 +43,11 @@ var publish = function(nodeid, readings) {
 				.replace("$json", JSON.stringify(json));
 				
 	request(url, function (error, response, body) {
-	  if (response.statusCode != 200) {
-		console.log(response.statusCode + " response: " + body);
+	  if (error) {
+		console.log("Error publishing to EmonCMS server: " + error);
+	  }
+	  else if (response.statusCode != 200) {
+		console.log(response.statusCode + " response from EmonCMS server: " + body);
 	  }
 	});
 };
