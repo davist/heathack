@@ -10,9 +10,9 @@ var publisher = new publishAPI.Publisher(config.publish_settings);
 
 var SP = serialport.SerialPort;
 
-// JeeLink on USB0 at 9600 baud
-var serial = new SP("/dev/ttyUSB0", {
-	baudrate: 9600,
+// JeeLink on USB0 at 9600 baud default
+var serial = new SP(config.serialport || "/dev/ttyUSB0", {
+	baudrate: config.baudrate || 9600,
 	parser: serialport.parsers.readline("\r\n")
 });
 

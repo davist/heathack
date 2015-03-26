@@ -5,6 +5,12 @@ config.publish_settings = {};
 // set to false for no output (e.g. if running in the background)
 config.verbose = true;
 
+// serial port the JeeNode receiver is connected to
+config.serialport = "/dev/ttyUSB0";
+
+// baud rate for connecting to JeeNode - default 9600
+config.baudrate = 9600;
+
 // name of publisher module to load for publishing readings to an external logging service
 config.publisher = "emoncms";
 
