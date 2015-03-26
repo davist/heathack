@@ -97,7 +97,11 @@ void loop() {
         Serial.print(" ");
       }
 
-      Serial.println(); 
+      Serial.println();
+      serialFlush();
+
+      // flash LED to indicate packet received
+      flashLED();
     }
     else {
       isRepeat = true;

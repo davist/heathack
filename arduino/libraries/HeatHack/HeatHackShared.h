@@ -45,6 +45,23 @@ static uint8_t transmitPower = 0;
 static uint8_t successiveRetries = 0;
 
 /////////////////////////////////////////////////////////////////////
+// flash the ACT LED on the JeeNode SMD and USB boards.
+void flashLED(uint8_t numFlashes = 1) {
+  pinMode(9, OUTPUT);
+
+  while (numFlashes > 0) {
+    digitalWrite(9, LOW);
+    delay(1);
+    digitalWrite(9, HIGH);
+
+    numFlashes--;
+
+    // delay between flashes
+    if (numFlashes > 0) Sleepy::loseSomeTime(100);
+  }
+}
+
+/////////////////////////////////////////////////////////////////////
 // wait a few milliseconds for proper ACK to me, return true if indeed received
 bool waitForAck(void) {
     uint32_t ackTimer = millis();
@@ -167,6 +184,8 @@ inline void doReport(void) {
 		//dataPacket.isRetransmit = true;
       }
       
+      flashLED();
+
       // send the data and wait for an acknowledgement
       rf12_sleep(RF12_WAKEUP);
       rf12_sendNow(RF12_HDR_ACK, &dataPacket, dataPacket.getTransmitSize());
@@ -572,6 +591,8 @@ void configConsole(void) {
 	for (uint8_t secs=5; secs > 0; secs--) {
 		Serial.print(F("\r"));
 		Serial.print(secs);
+    serialFlush();
+    flashLED();
 		while (millis() - start < 1000) {
 			int key = Serial.read();
 			if (key > 0) {
@@ -610,6 +631,8 @@ void configConsole(void) {
 	
 	Serial.println();
 	Serial.println(F("Entering run mode"));
+  serialFlush();
+  flashLED(2);
 }
 #endif
 
