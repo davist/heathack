@@ -213,6 +213,24 @@ struct HHReading {
 	
 	int16_t encodedReading;
 
+	// port and sensor are 1-based to match JeeNode labelling, but transmitted zero-based
+	// to fit into the available bits
+  uint8_t getPort() {
+    return portNumber + 1;
+  }
+
+  void setPort(uint8_t p) {
+    portNumber = p - 1;
+  }
+
+  uint8_t getSensor() {
+    return sensorNumber + 1;
+  }
+
+  void setSensor(uint8_t s) {
+    sensorNumber = s - 1;
+  }
+
 	int16_t getIntPartOfReading() {
 		if (HHSensorTypeIsInt[sensorType]) {
 			return encodedReading;
@@ -227,7 +245,7 @@ struct HHReading {
 			return NO_DECIMAL;
 		}
 		else {
-			return encodedReading % 10;
+			return abs(encodedReading % 10);
 		}
 	}
 };

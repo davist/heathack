@@ -8,7 +8,7 @@ const char* HHSensorTypeNames[] = {
 	"Movement",
 	"Pressure",
 	"Sound",
-    "Low Battery"
+	"Low Battery"
 };
 
 const char* HHSensorUnitNames[] = {

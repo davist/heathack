@@ -21,7 +21,7 @@
  * If the LCD display is connected and enabled it will be used to display readings.
  */
 
-//#define DEBUG 1
+#define DEBUG true
 
 // dht11/22 temp/humidity
 #define DHT_PORT 1
@@ -50,7 +50,7 @@
 
 
 #if DHT_PORT
-  DHT dht(DHT_PORT, SENSOR_DHT22);
+  DHT dht(DHT_PORT);
 #endif
 
 #if DS18B_PORT
@@ -148,14 +148,6 @@
     // the PIR signal comes in via a pin-change interrupt
     ISR(PCINT2_vect) { pir.poll(); }
 #endif
-
-
-#define SENSOR_LOWBATT  1
-#define SENSOR_TEMP     2
-#define SENSOR_HUMIDITY 3
-#define SENSOR_LIGHT    4
-#define SENSOR_MOTION   5
-#define SENSOR_TEMP2    6
 
 
 /////////////////////////////////////////////////////////////////////
@@ -336,7 +328,7 @@ void setup() {
     Serial.print(F("* DHT on port "));
     Serial.print(DHT_PORT);
     Serial.print(F(". Type: "));
-    if (dht.getType() == 0) {
+    if (dht.getType() == SENSOR_NONE) {
       Serial.print(F("no device present"));
     }
     else {

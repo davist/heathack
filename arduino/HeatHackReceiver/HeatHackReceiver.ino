@@ -74,7 +74,8 @@ void loop() {
       lastSequence[node-1] = data->sequence;
 
       // print out sensor readings on the serial port
-      // format is: heathack <node id> <sensor num> <sensor type> <reading> <sensor num> <sensor type> <reading> ...(repeated for each reading)
+      // format is: heathack <node id> <port num><sensor num> <sensor type> <reading> <sensor num> <sensor type> <reading> ...(repeated for each reading)
+      // Note port and sensor numbers are combined to report a single two-digit sensor number
       
       // start each line with a known string so that the code reading from the serial port can ignore spurious data
       Serial.print("heathack ");
@@ -82,9 +83,18 @@ void loop() {
       Serial.print(" ");
         
       for (byte i=0; i<data->numReadings; i++) {
-        Serial.print(data->readings[i].sensorNumber);
+        uint8_t sensorType = data->readings[i].sensorType;
+
+        if (sensorType == HHSensorType::LOW_BATT) {
+          // "low battery" isn't a real sensor (not attached to a port) so ignore port/sensor number and always use 1
+          Serial.print("1");
+        }
+        else {
+          Serial.print(data->readings[i].getPort());
+          Serial.print(data->readings[i].getSensor());
+        }
         Serial.print(" ");
-        Serial.print(data->readings[i].sensorType);
+        Serial.print(sensorType);
         Serial.print(" ");
         Serial.print(data->readings[i].getIntPartOfReading());
         
@@ -119,10 +129,19 @@ void loop() {
       Serial.println();
       
       for (byte i=0; i<data->numReadings; i++) {
-        Serial.print("* sensor ");
-        Serial.print(data->readings[i].sensorNumber);
-        Serial.print(": ");
-        Serial.print(HHSensorTypeNames[data->readings[i].sensorType]);
+        uint8_t sensorType = data->readings[i].sensorType;
+
+        Serial.print("* ");
+
+        // "low battery" isn't a real sensor (not attached to a port) so ignore port/sensor number and always use 1
+        if (sensorType != HHSensorType::LOW_BATT) {
+          Serial.print("port ");
+          Serial.print(data->readings[i].getPort());
+          Serial.print(" sensor ");
+          Serial.print(data->readings[i].getSensor());
+          Serial.print(": ");
+        }
+        Serial.print(HHSensorTypeNames[sensorType]);
         Serial.print(" ");
         Serial.print(data->readings[i].getIntPartOfReading());
         

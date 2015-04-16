@@ -116,6 +116,9 @@ public:
 	virtual void reading(HeatHackData& packet) = 0;
 };
 
+extern void serialFlush (void);
+
+
 /**********************************************************************************
  * Interface for the DHT11 and DHT22 sensors.
  * Does not use floating point, therefore results are returned in tenths of a unit,
@@ -171,7 +174,11 @@ public:
    * sensorType: DHT11_TYPE or DHT22_TYPE
    */
   DHT (byte portNum, byte type)
-	: Sensor(portNum), type(type), dataPin(0) {
+  : Sensor(portNum), type(type), dataPin(0) {
+  }
+
+  DHT (byte portNum)
+  : Sensor(portNum), type(SENSOR_NONE), dataPin(0) {
   }
 
   // test for the presence of a DHT sensor on the given port
@@ -182,19 +189,11 @@ public:
   }
 
   void init(void) {
-    init(false);
+    _init(false);
   }
 
-  void init(bool useIPin) {
-    #if defined(__AVR_ATtiny84__)
-      // select between I pin, D on port 1 or D on port 2
-      dataPin = useIPin ? 3 : 12 - 2 * portNum;
-    #else
-      // I pin for DHT data only supported on micro. Standard Jeenode always uses D pin
-      dataPin = portNum + 3;
-    #endif
-
-    if (type == SENSOR_NONE) this->type = testPort(portNum, useIPin);
+  void initOnIPin(void) {
+    _init(true);
   }
 
   inline uint8_t getType(void) {
@@ -203,55 +202,50 @@ public:
   
   void reading (HeatHackData& packet) {
 
+    if (type == SENSOR_NONE) return;
+
     enablePower();
+    bool success = readRawData();
 
-    bool success;
-
-    success = initiateReading();
-
-    #if DEBUG
-    if (!success) Serial.println("initiateReading failed");
-    #endif
-
-    if (success) {
-      success = readRawData();
-
-      #if DEBUG
-      if (!success) Serial.println("readRawData failed");
-      #endif
+//      #if DEBUG
+    if (!success) {
+      Serial.println("readRawData failed");
+      serialFlush();
     }
+    else {
+        Serial.print("data: ");
+        Serial.print(data[0], DEC);
+        Serial.print(" ");
+        Serial.print(data[1], DEC);
+        Serial.print(" ");
+        Serial.print(data[2], DEC);
+        Serial.print(" ");
+        Serial.print(data[3], DEC);
+        Serial.print(" ");
+        Serial.println(data[4], DEC);
+        serialFlush();
+    }
+//      #endif
+
 
     disablePower();
 
-    #if DEBUG
-    Serial.print("data: ");
-    Serial.print(data[0], DEC);
-    Serial.print(" ");
-    Serial.print(data[1], DEC);
-    Serial.print(" ");
-    Serial.print(data[2], DEC);
-    Serial.print(" ");
-    Serial.print(data[3], DEC);
-    Serial.print(" ");
-    Serial.println(data[4], DEC);
-    #endif
-
     if (success) {
-      int temp = 0, humi = 0;// temp, humi;
-      computeResults(temp, humi);
+      int temp = 0, humi = 0;
 
-      HHReading reading;
-      reading.portNumber = portNum - 1;
+      if (computeResults(temp, humi)) {
+        HHReading reading;
+        reading.setPort(portNum);
+        reading.setSensor(1);
+        reading.sensorType = HHSensorType::TEMPERATURE;
+        reading.encodedReading = temp;
+        packet.addReading(reading);
 
-      reading.sensorNumber = 0;
-      reading.sensorType = HHSensorType::TEMPERATURE;
-      reading.encodedReading = temp;
-      packet.addReading(reading);
-
-      reading.sensorNumber = 1;
-      reading.sensorType = HHSensorType::HUMIDITY;
-      reading.encodedReading = humi;
-      packet.addReading(reading);
+        reading.setSensor(2);
+        reading.sensorType = HHSensorType::HUMIDITY;
+        reading.encodedReading = humi;
+        packet.addReading(reading);
+      }
     }
 
     return;
@@ -294,6 +288,22 @@ public:
   
 protected:
   
+  void _init(bool useIPin) {
+    #if defined(__AVR_ATtiny84__)
+      // select between I pin, D on port 1 or D on port 2
+      dataPin = useIPin ? 3 : 12 - 2 * portNum;
+    #else
+      // I pin for DHT data only supported on micro. Standard Jeenode always uses D pin
+      dataPin = portNum + 3;
+    #endif
+
+    if (type == SENSOR_NONE) {
+      enablePower();
+      type = testPort(portNum, useIPin);
+      disablePower();
+    }
+  }
+
   inline void enablePower(void) {
     // turn on A pin to power up sensor
     mode2(OUTPUT);
@@ -301,8 +311,10 @@ protected:
 
     // Set data pin as an output initially for signalling sensor to take a reading.
     // Start with output high.
-    pinMode(dataPin, OUTPUT);
-    digitalWrite(dataPin, HIGH);
+
+    // let pull-up resistor pull data bus high
+    pinMode(dataPin, INPUT);
+    digitalWrite(dataPin, LOW);
 
     // sensor needs 1 sec to stabilise after power is applied
     Sleepy::loseSomeTime(1000);
@@ -360,22 +372,24 @@ protected:
     else return false;
   }
   
-  inline bool initiateReading(void) {
+  inline void initiateReading(void) {
     // pull bus low for >18ms to send start signal to sensor
     // Sleepy uses watchdog timer, which has 16ms resolution
+    pinMode(dataPin, OUTPUT);
     digitalWrite(dataPin, LOW);
-    Sleepy::loseSomeTime(32);
 
-    // set bus back to high to indicate we're ready to receive the result
-    digitalWrite(dataPin, HIGH);
-
-    // sensor starts its response by pulling bus low within 40us
-    // want to wait for it to have gone low before starting the reading
-    delayMicroseconds(40);
+    if (type == SENSOR_DHT22) {
+      delay(DHT22_ACTIVATION_MS);
+    }
+    else {
+      Sleepy::loseSomeTime(DHT11_ACTIVATION_MS);
+    }
 
     // enable pullup resistor for the input in case no sensor's connected -
     // it will be easier to detect an unchanging input if it's pulled up
     // rather than floating.
+
+    // release bus to indicate we're ready for sensor's response
     #if defined(__AVR_ATtiny84__)
       // INPUT_PULLUP not supported yet in the libs
       pinMode(dataPin, INPUT);
@@ -384,17 +398,50 @@ protected:
       pinMode(dataPin, INPUT_PULLUP);
     #endif
 
+    // sensor starts its response by pulling bus low within 40us
+    // want to wait for it to have gone low before starting the reading
+    delayMicroseconds(40);
+/*
     // sensor should have pulled line low by now
-    if (digitalRead(dataPin) != LOW) {
+    if (digitalRead(dataPin) == HIGH) {
       // looks like sensor's not responding
+      sei();
       return false;
     }
 
     return true;
+*/
+/*
+    uint8_t bits[100];
+    byte offset;
+
+    cli();
+
+    for (int i=0; i<800; i++) {
+
+      // collect each bit in the data buffer
+      offset = i >> 3;
+      bits[offset] <<= 1;  // shift existing bits left to make way for next one
+
+      if (digitalRead(dataPin) == HIGH) bits[offset] |= 1;
+    }
+
+    sei();
+
+    for (int i=0; i<100; i++) {
+      Serial.print(bits[i], BIN);
+    }
+
+    Serial.println();
+    serialFlush();
+*/
   }
+
 
 #if DHT_USE_INTERRUPTS  
   inline bool readRawData(void) {
+
+    initiateReading();
 
     set_sleep_mode(SLEEP_MODE_IDLE);
     sleep_enable();
@@ -437,9 +484,9 @@ protected:
 
   inline bool readRawData(void) {
   
-    bool result = true;
+    initiateReading();
 
-    // disable interrupts while receiving data
+    // clear interrupts to avoid timing problems
     cli();
 
     // each bit is a high edge followed by a variable length low edge
@@ -450,7 +497,7 @@ protected:
 
       // can't use micros() here for measuring the length of the pulse as interrupts have been
       // disabled, so instead simply count the number of times round the timer loop
-      for (byte inputLevel = 0; inputLevel < 2; inputLevel++) {
+      for (byte inputLevel = 0; inputLevel < 2 && timer < DHT_MAX_TIMER; inputLevel++) {
         for (timer = 0; timer < DHT_MAX_TIMER; timer++) {
           if (digitalRead(dataPin) != inputLevel) {
             break;
@@ -459,54 +506,54 @@ protected:
       }
 
       // if no transition was seen, return
-      if (timer == DHT_MAX_TIMER) {
-        result = false;
-        break;
+      if (timer >= DHT_MAX_TIMER) {
+        sei();
+        return false;
       }
+      else {
+        // ignore first 'bit' as it's really a sync pulse
+        if (currentBit >= 1 ) {
 
-      // ignore first 'bit' as it's really a sync pulse
-      if (currentBit >= 1 ) {
+          // collect each bit in the data buffer
+          byte offset = (currentBit-1) >> 3; // divide by 8
+          data[offset] <<= 1;  // shift existing bits left to make way for next one
 
-        // collect each bit in the data buffer
-        byte offset = (currentBit-1) >> 3; // divide by 8
-        data[offset] <<= 1;  // shift existing bits left to make way for next one
-
-        // short pulse is a 0, long pulse a 1
-        data[offset] |= (timer >= DHT_LONG_PULSE_CYCLES);
+          // short pulse is a 0, long pulse a 1
+          data[offset] |= (timer >= DHT_LONG_PULSE_CYCLES);
+        }
       }
     }
 
     // re-enable interrupts
     sei();
-
-    return result;
+    return true;
   }
 
 #endif
   
   inline bool computeResults(int& temp, int& humi) {
-	// calculate checksum to ensure data is valid
-	byte sum = data[0] + data[1] + data[2] + data[3];
-	if (sum != data[4]) {
-		return false;
-	}
+    // calculate checksum to ensure data is valid
+    byte sum = data[0] + data[1] + data[2] + data[3];
+    if (sum != data[4]) {
+      return false;
+    }
 
-	int t;
+    int t;
 
-	// higher precision DHT22 uses 2 bytes instead of 1
-	if (type == SENSOR_DHT22) {
-		humi =  (data[0] << 8) | data[1];
-		t = ((data[2] & 0x7F) << 8) | data[3];
-	}
-	else {
-		humi =  10 * data[0];
-		t = 10 * data[2];
-	}
+    // higher precision DHT22 uses 2 bytes instead of 1
+    if (type == SENSOR_DHT22) {
+      humi =  (data[0] << 8) | data[1];
+      t = ((data[2] & 0x7F) << 8) | data[3];
+    }
+    else {
+      humi =  10 * data[0];
+      t = 10 * data[2];
+    }
 
-	// is temperature negative?
-	temp = data[2] & 0x80 ? - t : t;
+    // is temperature negative?
+    temp = data[2] & 0x80 ? - t : t;
 
-	return true;
+    return true;
   }
 };
 
@@ -584,11 +631,11 @@ public:
     requestTemperatures();
 
 	HHReading reading;
-	reading.portNumber = portNum - 1;
+	reading.setPort(portNum);
 	reading.sensorType = HHSensorType::TEMPERATURE;
 
 	for (uint8_t i=0; i < numDevices; i++) {
-		reading.sensorNumber = i;
+		reading.setSensor(i + 1);
 		reading.encodedReading = getTemp(deviceAddress[i]);
 
 		if (reading.encodedReading != DS18B_INVALID_TEMP) {

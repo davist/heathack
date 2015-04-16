@@ -47,6 +47,7 @@ static uint8_t successiveRetries = 0;
 /////////////////////////////////////////////////////////////////////
 // flash the ACT LED on the JeeNode SMD and USB boards.
 void flashLED(uint8_t numFlashes = 1) {
+#if !defined(__AVR_ATtiny84__)
   pinMode(9, OUTPUT);
 
   while (numFlashes > 0) {
@@ -59,6 +60,7 @@ void flashLED(uint8_t numFlashes = 1) {
     // delay between flashes
     if (numFlashes > 0) Sleepy::loseSomeTime(100);
   }
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////

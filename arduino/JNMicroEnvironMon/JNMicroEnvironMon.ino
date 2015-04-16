@@ -324,7 +324,8 @@ void setup() {
 #endif
 
   #if ENABLE_DHT
-    dht.init(dhtOnIPin);
+    if (dhtOnIPin) dht.initOnIPin();
+    else  dht.init();
 
     #if DEBUG
       Serial.print("DHT: ");
