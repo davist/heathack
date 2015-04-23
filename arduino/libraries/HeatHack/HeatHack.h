@@ -203,9 +203,9 @@ struct HHReading {
 	
 	union {
 		struct {
+      byte sensorType : 4;
 			byte portNumber : 2;
 			byte sensorNumber : 2;
-			byte sensorType : 4;
 		};
 		
 		byte header;
