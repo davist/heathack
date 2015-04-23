@@ -16,7 +16,7 @@ void PatternPrecipitation::run(uint8_t intensity) {
 
   uint8_t i;
   
-  // set pile target height based on intensity (5 - 45)
+  // set pile target height based on intensity
   if (intensity != this->intensity) {
       this->intensity = intensity;
       
@@ -27,10 +27,10 @@ void PatternPrecipitation::run(uint8_t intensity) {
       }
       else {
         intensity--;
-        pile.setTarget( (5 + intensity * 4) * HEIGHT_PER_LED );
+        pile.setTarget( (1 + intensity * 6) * HEIGHT_PER_LED );
         
         // recalc next droplet step size
-        nextDropletStep = newStep(intensity);
+        nextDropletStep = newStep(config->dropletRateFixed ? 0 : intensity);
       }
   }
 
@@ -46,7 +46,7 @@ void PatternPrecipitation::run(uint8_t intensity) {
       }
   
       nextDropletCounter = 0;
-      nextDropletStep = newStep(config->dropletRateFixed ? 1 : intensity);
+      nextDropletStep = newStep(config->dropletRateFixed ? 0 : intensity);
   }
   else {
       nextDropletCounter = qadd8(nextDropletCounter, nextDropletStep);
@@ -90,7 +90,7 @@ uint8_t pow8(uint8_t n, uint8_t e) {
 const PrecipConfig PrecipSnow = {
   {180, 180, 250},   // pileColour
   {0, 0, 0},     // bgColour
-  {128, 0, 150},     // dropletColour
+  {128, 0, 100},     // dropletColour
   {255, 255, 255},   // glintColour
   
   250, // nextDropletTrigger
@@ -115,7 +115,7 @@ const PrecipConfig PrecipSnow = {
   20, // dropletShininess;
   4, // dropletRotationFast;
   5, // dropletRotationSlow;
-  105, // dropletValueRange (255 - dropletColour.v)
+  155, // dropletValueRange (255 - dropletColour.v)
   205, // dropletMinBrightness
   true // dropletRateFixed
 };

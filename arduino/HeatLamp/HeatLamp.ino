@@ -105,8 +105,14 @@ byte getIntensity(int16_t reading) {
   }
   else {
     if (reading < MIN_HOT_TEMP) {
-      // cold - intensity increases as temp falls from 15 to 5
-      intensity = 10 - qsub8(reading > 0 ? reading/10 : 0, 5);
+      // cold - intensity increases as temp falls from 15 to 0
+
+      if (reading > 0) {
+        intensity = (MIN_HOT_TEMP - 1 - reading) / 15;
+      }
+      else {
+        intensity = 10;
+      }
     }
     else {
       // hot - intensity increases as temp goes from 16 to 36

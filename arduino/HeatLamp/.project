@@ -42,6 +42,16 @@
 			<locationURI>ArduinoPivateLibPath/OneWire</locationURI>
 		</link>
 		<link>
+			<name>Libraries/SevSeg</name>
+			<type>2</type>
+			<locationURI>ArduinoPivateLibPath/SevSeg</locationURI>
+		</link>
+		<link>
+			<name>Libraries/TimerOne</name>
+			<type>2</type>
+			<locationURI>ArduinoPivateLibPath/TimerOne</locationURI>
+		</link>
+		<link>
 			<name>arduino/core</name>
 			<type>2</type>
 			<locationURI>ArduinoPlatformPath/cores/arduino</locationURI>
