@@ -16,21 +16,40 @@ function refreshData() {
 
 }
 
+function readableTime(t) {
+	var tSecs = Math.floor(t/1000);
+	if (tSecs < 60) return tSecs + "s";
+	if (tSecs < 120) return Math.floor(tSecs / 60) + "m " + (tSecs % 60) + "s";
+	if (tSecs < 3600) return Math.floor(tSecs / 60) + "m";
+	if (tSecs < 7200) "1h " + Math.floor(tSecs / 60) + "m";
+	return (tSecs / 3600) + "h";
+}
+
+function agedColour(t, maxT) {
+	// fade from green to red over maxT ts
+	var colFrac;
+	if ( t > maxT) colFrac = 255;
+	else colFrac = Math.floor(t/maxT * 255);
+	
+	return "rgb(" + colFrac + "," + (255 - colFrac) + ",0)";
+}
 
 function updateCurrent(data) {
 
 	var dom = $("#current")
-
 	dom.empty();
 
 	$.each(data.nodes, function(nodeid, node) {
 	
+		var time = Date.now() - node.lastReadingTime;
+		
 		var nodeDiv = $("<div/>", {
 			"class": "node-current"
 		});
 
 		$("<span/>", {
 			"class": "nodeid",
+			"style": "background-color: " + agedColour(time, 300000),
 			"html" : "Node " + nodeid
 		}).appendTo(nodeDiv);
 
@@ -65,6 +84,11 @@ function updateCurrent(data) {
 
 			nodeDiv.append( sensorDiv );
 		});
+
+		$("<span/>", {
+			"class": "readingtime",
+			"html" : readableTime(time) + " ago"
+		}).appendTo(nodeDiv);
 
 		dom.append( nodeDiv );		
 	});
@@ -106,23 +130,25 @@ function updateHistory(data) {
 			var unit = SensorType[sensor.type].unit;
 			var divisor = SensorType[sensor.type].maximum / 150;
 
-			function renderReading(reading) {
+			function renderReading(reading, index) {
 				var height = Math.floor(reading / divisor);
-	
+				var bgColour = agedColour(index, data.maxReadings);
+				
 				$("<div/>", {
 					"class": "reading",
 					"title": reading + " " + unit,
-					"style": "height: " + height + "px",
+					"style": "height: " + height + "px" + "; background-color: " + bgColour,
 					"html":  "<span>" + reading + "</span>"
 				}).appendTo(sensorDiv);
 			}
 
-			for (var index= sensor.lastReading+1; sensor.readings[index]; index++) {
-				renderReading(sensor.readings[index]);
+			var count = 0;
+			for (var index= sensor.lastReading; sensor.readings[index]; index--) {
+				renderReading(sensor.readings[index], count++);
 			}
 
-			for (var index= 0; index<=sensor.lastReading; index++) {
-				renderReading(sensor.readings[index]);
+			for (var index= sensor.readings.length - 1; index > sensor.lastReading; index--) {
+				renderReading(sensor.readings[index], count++);
 			}
 		});
 

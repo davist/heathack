@@ -47,6 +47,11 @@ app.listen(80);
 ///////////////////////////
 // serial listener
 
+serial.on("error", function(e) {
+	console.log("Serial port: " + e);
+	process.exit(1);
+});
+
 serial.on("open", function() {
 
 	console.log("serial port open");
@@ -74,6 +79,8 @@ serial.on("open", function() {
 			nodeData.nodes[nodeid] = node;
 		}
 
+		node.lastReadingTime = Date.now();
+		
 		// rest of tokens are tuples of sensor id, type and value
 		
 		// data to publish to emoncms
