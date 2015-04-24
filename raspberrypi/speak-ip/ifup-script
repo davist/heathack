@@ -1,0 +1,23 @@
+#! /bin/sh
+
+set -e
+
+# ignore loopback
+if [ "$IFACE" = lo ]; then
+	exit 0
+fi
+
+# Only run from ifup.
+if [ "$MODE" != start ]; then
+	exit 0
+fi
+
+# Only interested in IPv4
+if [ "$ADDRFAM" != inet ]; then
+	exit 0
+fi
+
+# detach speak-ip.sh and run it in the background so it doesn't hold up if-up
+{{INSTALL_DIR}}/speak-ip.sh "$IFACE"&
+
+exit 0
