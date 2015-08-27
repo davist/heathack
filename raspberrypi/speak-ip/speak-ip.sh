@@ -3,8 +3,8 @@
 # usage: speak-ip <interface name, eg wlan0>
 # 
 
-AUDIO_DIR=mstts-audio
-#AUDIO_DIR=voxeo-audio
+AUDIO_DIR=voxeo-audio
+#AUDIO_DIR=mstts-audio
 
 if [ -z "$1" ]; then
 	echo "usage: $0 <interface name, eg wlan0>"
