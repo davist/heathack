@@ -26,7 +26,7 @@
 #define VERBOSE 0
      
 // How many RGB leds?
-#define NUM_LEDS 5
+#define NUM_LEDS 6
 
 // what PWM pins are we using for R, G, and B in the multiplexing?  
 // Uno has PWM on 3, 5, 6, 9, 10, 11.  They aren't all the same.
@@ -37,7 +37,7 @@
 #define BLUE_PIN 11
 
 // what are our base colours for our colour scheme?
-const CRGB basecolour[NUM_LEDS] = {CRGB::AliceBlue,CRGB::Red,CRGB::Blue,CRGB::Green,CRGB::DarkViolet};
+const CRGB basecolour[NUM_LEDS] = {CRGB::White, CRGB::Red, CRGB::Blue, CRGB::Green, CRGB::Yellow, CRGB::Cyan};
 //const CRGB basecolour[NUM_LEDS] = {CRGB::Green,CRGB::Red,CRGB::Blue,CRGB::Green,CRGB::Red};
 
 
@@ -47,7 +47,7 @@ long animationInterval = 30000000;
 long previousAnimationTime = 0;
 
 // and what pins are we using for the NUM_LEDS grounds on the common cathodes?
-const int cathode_pin[NUM_LEDS] = {2,3,4,5,6};
+const int cathode_pin[NUM_LEDS] = {2,3,4,5,6,7};
 
 
 // a buffer for the colours that the multiplexer should pick up.
@@ -222,9 +222,9 @@ void turnLedOff(int i) {
 
 
 void turnLedOn(int i) {
-  analogWrite(RED_PIN,colourbuffer[i].red);
-  analogWrite(GREEN_PIN,colourbuffer[i].green);
-  analogWrite(BLUE_PIN,colourbuffer[i].blue);     
+  analogWrite(RED_PIN, colourbuffer[i].red);
+  analogWrite(GREEN_PIN, scale8_video(colourbuffer[i].green, 224));
+  analogWrite(BLUE_PIN, scale8_video(colourbuffer[i].blue, 140));     
   onTime[i] = micros();
   digitalWrite(cathode_pin[i],LOW);
   debug((String)i + " on at " + (String) onTime[i] + " with red " + (String)colourbuffer[i].red);
