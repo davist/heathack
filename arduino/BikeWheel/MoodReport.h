@@ -13,29 +13,27 @@ static const uint32_t STEADY_PALETTE_DURATION  = 300000;
 #define CHANGE_FRAME_DELAY 5
 
 
-class MoodSelected : public Mood {
+class MoodReport : public Mood {
   
   bool running;
   uint8_t step;
   uint8_t frameDelayCount;
-  CRGB colour;
   uint8_t curLedNum;
   uint8_t curFadeStep;
 
 public:
-  MoodSelected(uint8_t index) {
+  MoodReport() {
     uint8_t paletteSize = palettes[SELECT_PALETTE].size;
     this->colour = palettes[SELECT_PALETTE].colours[index % paletteSize];
     curLedNum = 0;
     running = true;
     step = 0;
     running = CHANGE_FRAME_DELAY;
-    curFadeStep = 10;
     frameDelayCount = 0;
   }
   
   // slower rate of change than default
-  uint8_t fadeStep() { return curFadeStep; }
+  uint8_t fadeStep() { return 60; }
   
   bool run(void) {
 

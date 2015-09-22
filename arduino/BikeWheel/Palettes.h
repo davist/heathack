@@ -4,7 +4,7 @@
 
 #include "config.h"
 
-#define NUM_PALETTES 2
+const uint8_t NUM_PALETTES = 2;
 
 struct Palette {
   uint8_t size;
@@ -13,8 +13,7 @@ struct Palette {
 
 extern const Palette palettes[NUM_PALETTES];
 
-#define PALETTE_HALLOWEEN 0
-#define PALETTE_RAINBOW 1
+enum PaletteNames { PALETTE_RAINBOW = 0, PALETTE_HALLOWEEN = 1 };
 
 #endif
 

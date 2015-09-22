@@ -37,12 +37,8 @@ enum MoodID { None, Twinkle, Selected, Report };
 Mood* curMood;
 MoodID curMoodID = None;
 
-
-
-//-------------------------------------------------------------------------
-void debug(String str) {
-  if (DEBUG) {Serial.println(str);};
-}
+// record number of times each input is selected
+uint8_t scores[NUM_LEDS];
 
 
 //-------------------------------------------------------------------------
@@ -68,11 +64,11 @@ inline void copyLedsToRealLeds(uint8_t step) {
     // red
     if (target->r != current->r) {
       if (target->r > current->r) {
-        if (target->r - current->r > step) current->r += step + 6;
+        if (target->r - current->r > (step + 6)) current->r += step + 6;
         else current->r = target->r;
       }
       else {
-        if (current->r - target->r > step) current->r -= step - 6;
+        if (current->r - target->r > (step - 6)) current->r -= step - 6;
         else current->r = target->r;
       }
     }
@@ -80,11 +76,11 @@ inline void copyLedsToRealLeds(uint8_t step) {
     // green
     if (target->g != current->g) {
       if (target->g > current->g) {
-        if (target->g - current->g > step) current->g += step + 3;
+        if (target->g - current->g > (step + 3)) current->g += step + 3;
         else current->g = target->g;
       }
       else {
-        if (current->g - target->g > step) current->g -= step - 3;
+        if (current->g - target->g > (step - 3)) current->g -= step - 3;
         else current->g = target->g;
       }
     }
@@ -112,17 +108,26 @@ void setMood(MoodID id, uint8_t index = 0) {
 
   delete curMood;
 
+#if DEBUG
+  Serial.print("set mood to ");
+  Serial.print(id);
+  Serial.print(", ");
+  Serial.println(index);
+#endif
+
+  // clear down all leds
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+
   switch (id) {
   case Twinkle:
     curMood = new MoodTwinkle();
     break;
   case Selected: {
-    uint8_t paletteSize = palettes[PALETTE_RAINBOW].size;
-    curMood = new MoodSelected(palettes[PALETTE_RAINBOW].colours[index % paletteSize]);
+    curMood = new MoodSelected(index);
     break;
   }
   case Report:
-    // TODO
+    curMood = new MoodReport();
     break;
   case None:
     break;
@@ -161,6 +166,7 @@ void loop() {
   // record which input is currently active
   static const byte NO_INPUT = 255;
   static byte activeInput = NO_INPUT;
+  static bool scoreChanged = false;
 
   // make sure RNG is as random as possible
   random16_add_entropy(random());
@@ -180,13 +186,28 @@ void loop() {
     // if an input active, switch to MoodSelected
     if (activeInput != NO_INPUT) {
       setMood(Selected, activeInput);
+      scoreChanged = false;
     }
     else {
-      setMood(Twinkle);
+      if (scoreChanged) {
+        // show current score order
+        scoreChanged = setMood(Report);
+      }
+      else {
+        setMood(Twinkle);
+      }
     }
 
-    curMood->run();
+    bool running = curMood->run();
     copyLedsToRealLeds(curMood->fadeStep());
+
+    if (curMoodID == Selected && activeInput != NO_INPUT && !running) {
+      // Selected anim has completed, so add 1 to the score
+      // qadd8 is used to clamp max at 255 instead of rolling round
+      scores[activeInput] = qadd8(scores[activeInput], 1);
+
+      scoreChanged = true;
+    }
   }
 
   // update LEDs
