@@ -4,6 +4,7 @@
 #include "Mood.h"
 #include "MoodTwinkle.h"
 #include "MoodSelected.h"
+#include "MoodReport.h"
 
 //-------------------------------------------------------------------------------------------
 // BEGIN CONFIGURATION
@@ -64,11 +65,11 @@ inline void copyLedsToRealLeds(uint8_t step) {
     // red
     if (target->r != current->r) {
       if (target->r > current->r) {
-        if (target->r - current->r > (step + 6)) current->r += step + 6;
+        if (target->r - current->r > step) current->r += step;
         else current->r = target->r;
       }
       else {
-        if (current->r - target->r > (step - 6)) current->r -= step - 6;
+        if (current->r - target->r > step) current->r -= step;
         else current->r = target->r;
       }
     }
@@ -76,11 +77,11 @@ inline void copyLedsToRealLeds(uint8_t step) {
     // green
     if (target->g != current->g) {
       if (target->g > current->g) {
-        if (target->g - current->g > (step + 3)) current->g += step + 3;
+        if (target->g - current->g > step) current->g += step;
         else current->g = target->g;
       }
       else {
-        if (current->g - target->g > (step - 3)) current->g -= step - 3;
+        if (current->g - target->g > step) current->g -= step;
         else current->g = target->g;
       }
     }
@@ -127,13 +128,47 @@ void setMood(MoodID id, uint8_t index = 0) {
     break;
   }
   case Report:
-    curMood = new MoodReport();
+    static uint8_t rankings[NUM_LEDS];
+    static uint8_t scoreSort[NUM_LEDS];
+
+    // calculate current rankings from scores
+
+    // initialise rankings / scoreSort
+    for (uint8_t r=0; r<NUM_LEDS; r++) {
+      scoreSort[r] = scores[r];
+
+      // only include scores > 0
+      if (scores[r] > 0) {
+        rankings[r] = r;
+      }
+      else {
+        rankings[r] = 255;
+      }
+    }
+
+    // sort scores
+    for(uint8_t i=0; i<(NUM_LEDS-1); i++) {
+      for(uint8_t o=0; o<(NUM_LEDS-(i+1)); o++) {
+        if(scoreSort[o] < scoreSort[o+1]) {
+          swap(&scoreSort[o], &scoreSort[o+1]);
+          swap(&rankings[o], &rankings[o+1]);
+        }
+      }
+    }
+
+    curMood = new MoodReport(rankings);
     break;
   case None:
     break;
   }
 
   curMoodID = id;
+}
+
+void swap(uint8_t *a, uint8_t *b) {
+  (*a) ^= (*b);
+  (*b) ^= (*a);
+  (*a) ^= (*b);
 }
 
 //-------------------------------------------------------------------------
@@ -189,9 +224,10 @@ void loop() {
       scoreChanged = false;
     }
     else {
+      // if Selected completed and score was increased, show Report,
+      // otherwise go back to Twinkle
       if (scoreChanged) {
-        // show current score order
-        scoreChanged = setMood(Report);
+        setMood(Report);
       }
       else {
         setMood(Twinkle);
@@ -207,6 +243,11 @@ void loop() {
       scores[activeInput] = qadd8(scores[activeInput], 1);
 
       scoreChanged = true;
+    }
+    else if (curMoodID == Report && !running) {
+      // report has finished. Return to twinkle
+      setMood(Twinkle);
+      scoreChanged = false;
     }
   }
 

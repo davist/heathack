@@ -2,114 +2,50 @@
 #ifndef __INC_MOOD_SELECTED_H
 #define __INC_MOOD_SELECTED_H
 
-#include "Mood.h"
+#include "MoodSequence.h"
 #include "Palettes.h"
 #include "config.h"
 
 
-static const uint32_t INDEX_DURATION = 30000;
-static const uint32_t STEADY_PALETTE_DURATION  = 300000;
-
-#define CHANGE_FRAME_DELAY 5
-
-
-class MoodSelected : public Mood {
+class MoodSelected : public MoodSequence {
   
-  bool running;
-  uint8_t step;
-  uint8_t frameDelayCount;
-  CRGB colour;
-  uint8_t curLedNum;
-  uint8_t curFadeStep;
+  // palette of colours used in the anim
+  CRGB animPalette[3] = {
+      CRGB::Black,
+      CRGB::White,
+      0   // placeholder for current colour to be inserted
+  };
+
+  // names for the palette entries
+  const static uint8_t PALETTE_BLACK = 0;
+  const static uint8_t PALETTE_WHITE = 1;
+  const static uint8_t PALETTE_CUR_COLOUR = 2;
+
+  // sequence defining the animation
+  SeqStep sequence[9] = {
+      // step 0 - set all to black
+      { ALL_LEDS, PALETTE_BLACK, 5, 60 },
+
+      // steps 1 to 6 - turn on leds to required colour one by one
+      { 0, PALETTE_CUR_COLOUR, 4, 10 },
+      { 1, PALETTE_CUR_COLOUR, 4, 10 },
+      { 2, PALETTE_CUR_COLOUR, 4, 10 },
+      { 3, PALETTE_CUR_COLOUR, 4, 10 },
+      { 4, PALETTE_CUR_COLOUR, 4, 10 },
+      { 5, PALETTE_CUR_COLOUR, 4, 10 },
+
+      // step 7 - flash all leds to white
+      { ALL_LEDS, PALETTE_WHITE, 2, 150 },
+
+      // step 8 - return to colour
+      { ALL_LEDS, PALETTE_CUR_COLOUR, 5, 20 }
+  };
 
 public:
-  MoodSelected(uint8_t index) {
+  MoodSelected(uint8_t index) : MoodSequence(sequence, animPalette, 9) {
     uint8_t paletteSize = palettes[SELECT_PALETTE].size;
-    this->colour = palettes[SELECT_PALETTE].colours[index % paletteSize];
-    curLedNum = 0;
-    running = true;
-    step = 0;
-    running = CHANGE_FRAME_DELAY;
-    curFadeStep = 10;
-    frameDelayCount = 0;
+    animPalette[PALETTE_CUR_COLOUR] = palettes[SELECT_PALETTE].colours[index % paletteSize];
   }
-  
-  // slower rate of change than default
-  uint8_t fadeStep() { return curFadeStep; }
-  
-  bool run(void) {
-
-    if (!running) return false;
-
-    switch (step) {
-      case 0:
-        // filling up
-        if (!doChangeStep()) {
-          // finished filling up
-          step = 1;
-        }
-        break;
-
-      case 1:
-        // flash white
-        if (!doFlashStep()) {
-          step = 2;
-        }
-        break;
-      case 2:
-        // back to colour
-        if (!doReturnStep()) {
-          running = false;
-        }
-        break;
-    }
-    
-    return true;
-  }
-  
-private:
-
-bool doChangeStep(void) {
-  // wait for frameDelay frames before executing next step
-  if (++frameDelayCount < CHANGE_FRAME_DELAY) return true;
-
-  frameDelayCount = 0;
-
-  leds[curLedNum++] = colour;
-
-  if (curLedNum == NUM_LEDS) {
-    // finished
-    return false;
-  }
-  else {
-    // keep changing
-    return true;
-  }
-}
-
-bool doFlashStep(void) {
-  // wait for frameDelay frames before executing next step
-  if (++frameDelayCount < CHANGE_FRAME_DELAY) return true;
-
-  frameDelayCount = 0;
-
-  fill_solid(leds, NUM_LEDS, CRGB::White);
-  curFadeStep = 60;
-
-  return false;
-}
-  
-bool doReturnStep(void) {
-  // wait for frameDelay frames before executing next step
-  if (++frameDelayCount < CHANGE_FRAME_DELAY) return true;
-
-  frameDelayCount = 0;
-
-  fill_solid(leds, NUM_LEDS, colour);
-  curFadeStep = 20;
-
-  return false;
-}
 
 };
 

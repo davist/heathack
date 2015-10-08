@@ -1,113 +1,75 @@
 
-#ifndef __INC_MOOD_SELECTED_H
-#define __INC_MOOD_SELECTED_H
+#ifndef __INC_MOOD_REPORT_H
+#define __INC_MOOD_REPORT_H
 
-#include "Mood.h"
+#include "MoodSequence.h"
 #include "Palettes.h"
 #include "config.h"
 
 
-static const uint32_t INDEX_DURATION = 30000;
-static const uint32_t STEADY_PALETTE_DURATION  = 300000;
+class MoodReport : public MoodSequence {
 
-#define CHANGE_FRAME_DELAY 5
+  // palette of colours used in the anim
+  CRGB animPalette[8] = {
+      CRGB::Black,
+      CRGB::White,
+      // placeholders for current colour to be inserted
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+  };
 
+  // names for the palette entries
+  const static uint8_t PALETTE_BLACK = 0;
+  const static uint8_t PALETTE_WHITE = 1;
+  const static uint8_t PALETTE_RANKING_BASE = 2;
 
-class MoodReport : public Mood {
-  
-  bool running;
-  uint8_t step;
-  uint8_t frameDelayCount;
-  uint8_t curLedNum;
-  uint8_t curFadeStep;
+  // sequence defining the animation
+  SeqStep sequence[13] = {
+      // step 0 - set all to black
+      { ALL_LEDS, PALETTE_BLACK, 5, 60 },
+
+      // flash each led to white and then fade to ranking colour
+      { 0, PALETTE_WHITE, 2, 150 },
+      { 0, PALETTE_RANKING_BASE, 10, 20 },
+
+      { 1, PALETTE_WHITE, 2, 150 },
+      { 1, PALETTE_RANKING_BASE+1, 20, 20 },
+
+      { 2, PALETTE_WHITE, 2, 150 },
+      { 2, PALETTE_RANKING_BASE+2, 20, 20 },
+
+      { 3, PALETTE_WHITE, 2, 150 },
+      { 3, PALETTE_RANKING_BASE+3, 20, 20 },
+
+      { 4, PALETTE_WHITE, 2, 150 },
+      { 4, PALETTE_RANKING_BASE+4, 20, 20 },
+
+      { 5, PALETTE_WHITE, 2, 150 },
+      { 5, PALETTE_RANKING_BASE+5, 150, 20 },
+
+  };
 
 public:
-  MoodReport() {
+  /**
+   * rankings gives the order to display the colours
+   */
+  MoodReport(uint8_t *rankings) : MoodSequence(sequence, animPalette, 13) {
     uint8_t paletteSize = palettes[SELECT_PALETTE].size;
-    this->colour = palettes[SELECT_PALETTE].colours[index % paletteSize];
-    curLedNum = 0;
-    running = true;
-    step = 0;
-    running = CHANGE_FRAME_DELAY;
-    frameDelayCount = 0;
-  }
-  
-  // slower rate of change than default
-  uint8_t fadeStep() { return 60; }
-  
-  bool run(void) {
 
-    if (!running) return false;
-
-    switch (step) {
-      case 0:
-        // filling up
-        if (!doChangeStep()) {
-          // finished filling up
-          step = 1;
-        }
-        break;
-
-      case 1:
-        // flash white
-        if (!doFlashStep()) {
-          step = 2;
-        }
-        break;
-      case 2:
-        // back to colour
-        if (!doReturnStep()) {
-          running = false;
-        }
-        break;
+    // copy colours from palette to animPalette based on the rankings
+    for (uint8_t l=0; l<NUM_LEDS; l++) {
+      if (rankings[l] == 255) {
+        animPalette[PALETTE_RANKING_BASE + l] = CRGB::Black;
+      }
+      else {
+        animPalette[PALETTE_RANKING_BASE + l] = palettes[REPORT_PALETTE].colours[rankings[l] % paletteSize];
+      }
     }
-    
-    return true;
   }
-  
-private:
-
-bool doChangeStep(void) {
-  // wait for frameDelay frames before executing next step
-  if (++frameDelayCount < CHANGE_FRAME_DELAY) return true;
-
-  frameDelayCount = 0;
-
-  leds[curLedNum++] = colour;
-
-  if (curLedNum == NUM_LEDS) {
-    // finished
-    return false;
-  }
-  else {
-    // keep changing
-    return true;
-  }
-}
-
-bool doFlashStep(void) {
-  // wait for frameDelay frames before executing next step
-  if (++frameDelayCount < CHANGE_FRAME_DELAY) return true;
-
-  frameDelayCount = 0;
-
-  fill_solid(leds, NUM_LEDS, CRGB::White);
-  curFadeStep = 60;
-
-  return false;
-}
-  
-bool doReturnStep(void) {
-  // wait for frameDelay frames before executing next step
-  if (++frameDelayCount < CHANGE_FRAME_DELAY) return true;
-
-  frameDelayCount = 0;
-
-  fill_solid(leds, NUM_LEDS, colour);
-  curFadeStep = 20;
-
-  return false;
-}
 
 };
 

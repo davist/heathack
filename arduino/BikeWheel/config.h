@@ -34,8 +34,5 @@ const uint8_t INPUT_PINS[NUM_LEDS] = {A0, A1, A2, A3, A4, A5};
 // Define the array of leds
 extern CRGB leds[NUM_LEDS];
 
-const uint8_t SELECT_PALETTE = PALETTE_RAINBOW;
-const uint8_t REPORT_PALETTE = PALETTE_RAINBOW;
-
 #endif
 
