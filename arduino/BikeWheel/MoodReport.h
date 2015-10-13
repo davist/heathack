@@ -30,7 +30,7 @@ class MoodReport : public MoodSequence {
   // sequence defining the animation
   SeqStep sequence[13] = {
       // step 0 - set all to black
-      { ALL_LEDS, PALETTE_BLACK, 5, 60 },
+      { ALL_LEDS, PALETTE_BLACK, 30, 40 },
 
       // flash each led to white and then fade to ranking colour
       { 0, PALETTE_WHITE, 2, 150 },

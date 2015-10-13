@@ -13,7 +13,7 @@ struct Palette {
 
 extern const Palette palettes[NUM_PALETTES];
 
-enum PaletteNames { PALETTE_RAINBOW = 0, PALETTE_HALLOWEEN = 1 };
+enum PaletteNames { PALETTE_RAINBOW = 0 };
 
 const uint8_t SELECT_PALETTE = PALETTE_RAINBOW;
 const uint8_t REPORT_PALETTE = PALETTE_RAINBOW;

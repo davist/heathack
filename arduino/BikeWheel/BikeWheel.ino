@@ -43,60 +43,23 @@ uint8_t scores[NUM_LEDS];
 
 
 //-------------------------------------------------------------------------
-// for now, just pick random base colours for the LEDS. 
-void animate() {
-  for (int i=0; i< NUM_LEDS; i++) {
-     //STUB pick a random base colour
-     long choice = random(0,NUM_LEDS);
-     leds[i] = basecolour[(int)choice];
-   }  
-}
-
-
-//-------------------------------------------------------------------------
+// copy leds to realLeds with hysteresis
 inline void copyLedsToRealLeds(uint8_t step) {
-  // copy leds to realLeds with hysteresis
-  // bias the colour towards red as it dims
 
   for (uint8_t i=0; i<NUM_LEDS; i++) {
     CRGB *current = &realLeds[i];
     CRGB *target = &leds[i];
+    CRGB oldCurrent = *current;
 
-    // red
-    if (target->r != current->r) {
-      if (target->r > current->r) {
-        if (target->r - current->r > step) current->r += step;
-        else current->r = target->r;
-      }
-      else {
-        if (current->r - target->r > step) current->r -= step;
-        else current->r = target->r;
-      }
-    }
+    // use linear interpolation to move from current colour towards target colour
+    current->r = lerp8by8(current->r, target->r, step * 2);
+    current->g = lerp8by8(current->g, target->g, step * 2);
+    current->b = lerp8by8(current->b, target->b, step * 2);
 
-    // green
-    if (target->g != current->g) {
-      if (target->g > current->g) {
-        if (target->g - current->g > step) current->g += step;
-        else current->g = target->g;
-      }
-      else {
-        if (current->g - target->g > step) current->g -= step;
-        else current->g = target->g;
-      }
-    }
-
-    // blue
-    if (target->b != current->b) {
-      if (target->b > current->b) {
-        if (target->b - current->b > step) current->b += step;
-        else current->b = target->b;
-      }
-      else {
-        if (current->b - target->b > step) current->b -= step;
-        else current->b = target->b;
-      }
-    }
+    // if no change, force to target value
+    if (*current == oldCurrent) {
+      *current = *target;
+    }    
   }
 }
 

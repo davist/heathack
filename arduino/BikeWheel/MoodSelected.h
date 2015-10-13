@@ -35,10 +35,10 @@ class MoodSelected : public MoodSequence {
       { 5, PALETTE_CUR_COLOUR, 4, 10 },
 
       // step 7 - flash all leds to white
-      { ALL_LEDS, PALETTE_WHITE, 2, 150 },
+      { ALL_LEDS, PALETTE_WHITE, 0, 255 },
 
       // step 8 - return to colour
-      { ALL_LEDS, PALETTE_CUR_COLOUR, 5, 20 }
+      { ALL_LEDS, PALETTE_CUR_COLOUR, 0, 20 }
   };
 
 public:
