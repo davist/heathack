@@ -28,7 +28,7 @@ const uint8_t FPS = 30;
 const uint16_t FRAME_TIME = (1000/(FPS));
 
 // pins used for the inputs
-const uint8_t INPUT_PINS[NUM_LEDS] = {A0, A1, A2, A3, A4, A5};
+const uint8_t INPUT_PINS[NUM_LEDS] = {A0, A1, A5, A4, A2, A3};
 
 
 // Define the array of leds
