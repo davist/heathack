@@ -4,6 +4,14 @@
 #include <Arduino.h>
 #include <JeeLib.h>
 
+// Update version number for every release.
+// Version number is major.minor
+// A change to the major indicates a break in compatibility between transmitter and receiver,
+// i.e. all devices on a network need the same major number to work together correctly.
+// Minor number is increased for non-breaking changes.
+#define VERSION "1.1"
+
+
 // The serial port baud rate to use for all HeatHack devices
 // JNMicro only supports 9600, 38400, or 115200
 #define BAUD_RATE 9600
@@ -78,14 +86,15 @@
 #define EEPROM_GROUP    (RF12_EEPROM_ADDR + 0) // group id
 #define EEPROM_NODE     (RF12_EEPROM_ADDR + 1) // node id
 #define EEPROM_INTERVAL (HH_EEPROM_BASE + 0)   // transmit interval in 10s of secs
-#define EEPROM_RX_FLAGS (HH_EEPROM_BASE + 1)   // flags specific to the receiver
+#define EEPROM_FLAGS    (HH_EEPROM_BASE + 1)   // flags (see below)
 #define EEPROM_PORT1    (HH_EEPROM_BASE + 2)   // type of sensor attached to port 1
 #define EEPROM_PORT2    (HH_EEPROM_BASE + 3)   // type of sensor attached to port 2
 #define EEPROM_PORT3    (HH_EEPROM_BASE + 4)   // type of sensor attached to port 3
 #define EEPROM_PORT4    (HH_EEPROM_BASE + 5)   // type of sensor attached to port 4
 
-#define RX_FLAG_ACK 0x01
-#define RX_FLAG_VERBOSE 0x02
+// flags stored in EEPROM_FLAGS
+#define FLAG_ACK 0x01
+#define FLAG_VERBOSE 0x02
 
 // per-port sensor types
 #define SENSOR_NONE  1   // no sensor attached
@@ -95,11 +104,11 @@
 #define SENSOR_DHT22 22
 #define SENSOR_DS18B 18
 #define SENSOR_HYT131 131
-#define SENSOR_LCD   3
-#define SENSOR_LDR   4   // light-dependent resistor between AIO and GND pins
-#define SENSOR_PULSE 5   // pulsed input on DIO pin (e.g. hall-effect switch or photo-detector for meter reading)
+#define SENSOR_LCD   5
+#define SENSOR_LDR   3   // light-dependent resistor between AIO and GND pins
+#define SENSOR_PULSE 4   // pulsed input on DIO pin (e.g. hall-effect switch or photo-detector for meter reading)
 
-// max sensor type number
+// max sensor type number that can be entered in config console
 #define SENSOR_MIN 1
 #define SENSOR_MAX 4
 
@@ -158,6 +167,8 @@
 #define RETRY_PERIOD    1000  // how soon to retry if ACK didn't come in
 #define RETRY_LIMIT     5   // maximum number of times to retry
 #define SUCCESSIVE_RETRY_THRESHOLD 4 // number of doReports that must fail on 1st try before recalcing min transmit power
+#define NO_RESPONSE     255  // value returned by findMinTransmitPower indicating receiver couldn't be contacted
+#define POWER_RETRY_PERIOD    100  // how soon to retry when determining min transmit power
 
 // set the sync mode to 2 if the fuses are still the Arduino default
 // mode 3 (full powerdown) can only be used with 258 CK startup fuses

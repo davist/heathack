@@ -22,7 +22,7 @@ static uint8_t myInterval;     // interval between transmissions in 10s of secs
 // extended eeprom data that's not used by the Micro
 
 static uint8_t portSensor[4];  // type of sensor attached to each port
-static uint8_t receiverFlags;
+static uint8_t eepromFlags;
 #endif
 
 
@@ -96,35 +96,66 @@ void serialFlush (void) {
 
 /////////////////////////////////////////////////////////////////////
 // sends a test packet and waits for an ack while increasing the
-// transmit power. Returns min level (7-0) at which a response was received.
+// transmit power. Returns min level (7-0) at which a response was received,
+// or -1 if no response received at any power level.
 uint8_t findMinTransmitPower(void) {
 
-	uint8_t txPower;
-	bool gotAck = false;
+	uint8_t txPower = 7;
+	uint8_t ackCount = 0;
 
-	HeatHackData testPacket;
   HHReading reading;
   reading.sensorType = HHSensorType::TEST;
-  testPacket.addReading(reading);
-	
-  rf12_sleep(RF12_WAKEUP);
-	
-	for (txPower = 7; txPower >= 0 && !gotAck; txPower--) {
+  dataPacket.clear();
+  dataPacket.addReading(reading);
 
-		// set radio's transmit power
-		rf12_control(0x9850 | txPower);
+#if DEBUG
+  Serial.println(F("Finding min transmit power (0=max)"));
+  Serial.flush();
+#endif
+	
+  do {
+		// try twice at each power level to check for consistency
+		ackCount = 0;
+		for (uint8_t tries = 2; tries > 0; tries--) {
 
-		// try twice at each power level
-		for (uint8_t tries = 2, gotAck = false; tries > 0 && !gotAck; tries--) {		
-			rf12_sendNow(RF12_HDR_ACK, &testPacket, testPacket.getTransmitSize());
+	    rf12_sleep(RF12_WAKEUP);
+	    rf12_control(0x9850 | txPower); // set radio's transmit power
+      rf12_sendNow(RF12_HDR_ACK, &dataPacket, dataPacket.getTransmitSize());
 			rf12_sendWait(RADIO_SYNC_MODE);
-			gotAck = waitForAck();
+			if (waitForAck()) ackCount++;
+	    rf12_sleep(RF12_SLEEP);
+
+      #if DEBUG
+        Serial.print(F("  power "));
+        Serial.print(txPower);
+        Serial.print(F(" try "));
+        Serial.print(3 - tries);
+        Serial.print(F(" acks "));
+        Serial.println(ackCount);
+        Serial.flush();
+      #endif
+
+      Sleepy::loseSomeTime(POWER_RETRY_PERIOD);
+		}
+
+		if (ackCount < 2) {
+		  // didn't get an ack for every transmit
+		  txPower--;
 		}
 	}
+  while (txPower >= 0 && txPower <= 7 && ackCount < 2);
 
-    rf12_sleep(RF12_SLEEP);
-		
-	return txPower;
+
+#if DEBUG
+  if (txPower == NO_RESPONSE) Serial.println(F("No response from receiver"));
+  else {
+    Serial.print(F("Using power "));
+    Serial.println(txPower);
+  }
+  Serial.flush();
+#endif
+
+  return txPower;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -136,83 +167,90 @@ inline void setTransmitPower(uint8_t power) {
 /////////////////////////////////////////////////////////////////////
 // set radio transmit power to maximum (level 0)
 inline void setMaxTransmitPower(void) {
-	rf12_control(0x9850);
+  rf12_control(0x9850);
 }
 
 
 /////////////////////////////////////////////////////////////////////
 // periodic report, i.e. send out a packet and optionally report on serial port
 inline void doReport(void) {
-    #if DEBUG  
-        Serial.println(F("--------------------------"));
+#if !defined(__AVR_ATtiny84__)
+  if (eepromFlags & FLAG_VERBOSE) {
+      Serial.println(F("--------------------------"));
 
-        for (byte i=0; i<dataPacket.numReadings; i++) {
-          Serial.print(F("* sensor "));
-          Serial.print(dataPacket.readings[i].sensorNumber);
-          Serial.print(F(": "));
-          Serial.print(HHSensorTypeNames[dataPacket.readings[i].sensorType]);
-          Serial.print(F(" "));
-          Serial.print(dataPacket.readings[i].getIntPartOfReading());
-          
-          uint8_t decimal = dataPacket.readings[i].getDecPartOfReading();        
-          if (decimal != NO_DECIMAL) {
-            // display as decimal value to 1 decimal place
-            Serial.print(F("."));
-            Serial.print(decimal);
-          }
-          Serial.println();        
+      for (byte i=0; i<dataPacket.numReadings; i++) {
+        Serial.print(F("* sensor "));
+        Serial.print(dataPacket.readings[i].getPort());
+        Serial.print(dataPacket.readings[i].getSensor());
+        Serial.print(F(": "));
+        Serial.print(HHSensorTypeNames[dataPacket.readings[i].sensorType]);
+        Serial.print(F(" "));
+        Serial.print(dataPacket.readings[i].getIntPartOfReading());
+
+        uint8_t decimal = dataPacket.readings[i].getDecPartOfReading();
+        if (decimal != NO_DECIMAL) {
+          // display as decimal value to 1 decimal place
+          Serial.print(F("."));
+          Serial.print(decimal);
         }
-        serialFlush();
-    #endif
-
-    if (dataPacket.numReadings == 0) {
-      // nothing to do
-      return;
-    }
-    
-    bool acked = false;
-    byte retry = 0;
-
-    do {
-      if (retry == 0) {
-        setTransmitPower(transmitPower);
+        Serial.println();
       }
-      else {
-        // use maximum power for retries
-        setMaxTransmitPower();
+      serialFlush();
+  }
+#endif
 
-        // delay before any retry
-        Sleepy::loseSomeTime(RETRY_PERIOD);
-		//dataPacket.isRetransmit = true;
-      }
-      
-      flashLED();
+  if (dataPacket.numReadings == 0) {
+    // nothing to do
+    return;
+  }
 
-      // send the data and wait for an acknowledgement
-      rf12_sleep(RF12_WAKEUP);
-      rf12_sendNow(RF12_HDR_ACK, &dataPacket, dataPacket.getTransmitSize());
-      rf12_sendWait(RADIO_SYNC_MODE);
-      acked = waitForAck();
-      rf12_sleep(RF12_SLEEP);
-      
-      retry++;
-    }
-    // if hibernating only send once, otherwise keep resending until ack received or retry limit reached
-    while (!acked && !hibernating && retry < RETRY_LIMIT);
+  bool acked = false;
+  byte retry = 0;
 
-    if (acked && retry == 1) {
-      // succeeded on first try
-      successiveRetries = 0;
+  do {
+    if (retry == 0) {
+      setTransmitPower(transmitPower);
     }
     else {
-      successiveRetries++;
+#if DEBUG
+      Serial.println("No Ack received. Resending at max power.");
+      Serial.flush();
+#endif
+
+      // use maximum power for retries
+      setMaxTransmitPower();
+
+      // delay before any retry
+      Sleepy::loseSomeTime(RETRY_PERIOD);
+  //dataPacket.isRetransmit = true;
     }
 
-    if (successiveRetries > SUCCESSIVE_RETRY_THRESHOLD) {
-      transmitPower = findMinTransmitPower();
-      successiveRetries = 0;
-    }
+    flashLED();
 
+    // send the data and wait for an acknowledgement
+    rf12_sleep(RF12_WAKEUP);
+    rf12_sendNow(RF12_HDR_ACK, &dataPacket, dataPacket.getTransmitSize());
+    rf12_sendWait(RADIO_SYNC_MODE);
+    acked = waitForAck();
+    rf12_sleep(RF12_SLEEP);
+
+    retry++;
+  }
+  // if hibernating only send once, otherwise keep resending until ack received or retry limit reached
+  while (!acked && !hibernating && retry < RETRY_LIMIT);
+
+  if (acked && retry == 1) {
+    // succeeded on first try
+    successiveRetries = 0;
+  }
+  else {
+    successiveRetries++;
+  }
+
+  if (successiveRetries > SUCCESSIVE_RETRY_THRESHOLD) {
+    transmitPower = findMinTransmitPower();
+    successiveRetries = 0;
+  }
 }
 
 
@@ -292,7 +330,7 @@ inline void readEeprom(void) {
 	portSensor[1] = eeprom_read_byte(EEPROM_PORT2);
 	portSensor[2] = eeprom_read_byte(EEPROM_PORT3);
 	portSensor[3] = eeprom_read_byte(EEPROM_PORT4);
-	receiverFlags = eeprom_read_byte(EEPROM_RX_FLAGS);
+	eepromFlags = eeprom_read_byte(EEPROM_FLAGS);
 	
 	for (uint8_t i=0; i<=3; i++) {
 		if (portSensor[i] < SENSOR_MIN || portSensor[i] > SENSOR_MAX) portSensor[i] = SENSOR_AUTO;
@@ -313,7 +351,7 @@ inline void writeEeprom(void) {
 	eeprom_update_byte(EEPROM_PORT2, portSensor[1]);
 	eeprom_update_byte(EEPROM_PORT3, portSensor[2]);
 	eeprom_update_byte(EEPROM_PORT4, portSensor[3]);
-	eeprom_update_byte(EEPROM_RX_FLAGS, receiverFlags);
+	eeprom_update_byte(EEPROM_FLAGS, eepromFlags);
   #endif
 }
 
@@ -385,15 +423,13 @@ void displaySettings(void) {
 		Serial.println(F(" (fixed for receiver)"));
 	
 		Serial.print(F(" acknowledgements "));
-		Serial.println( (receiverFlags & RX_FLAG_ACK) ? "on" : "off" );
-		Serial.print(F(" verbose output "));
-		Serial.println( (receiverFlags & RX_FLAG_VERBOSE) ? "on" : "off" );
-	#else
+		Serial.println( (eepromFlags & FLAG_ACK) ? "on" : "off" );
+  #else
 		Serial.println(myNodeID);
 		Serial.print(F(" transmit interval "));
 		Serial.print(myInterval);
 		Serial.println(F("0 seconds"));
-		
+/*
 		for (uint8_t port = 0; port <= 3; port++ ) {
 			Serial.print(F(" port "));
 			Serial.print(port + 1);
@@ -401,7 +437,7 @@ void displaySettings(void) {
 			switch (portSensor[port]) {
 
 			case SENSOR_NONE:
-				Serial.println(F("no sensor"));
+				Serial.println(F("disabled"));
 				break;
 			case SENSOR_AUTO:
 				Serial.println(F("auto"));
@@ -417,7 +453,42 @@ void displaySettings(void) {
 				break;					
 			}
 		}
+*/
+
+    #if DHT_PORT
+		  Serial.print(F(" DHT11/22 on port "));
+      Serial.println(DHT_PORT);
+    #endif
+
+    #if DS18B_PORT
+      Serial.print(F(" DS18B on port "));
+      Serial.println(DS18B_PORT);
+    #endif
+
+    #if HYT131_PORT
+      Serial.print(F(" HYT131 (room board) on port "));
+      Serial.println(HYT131_PORT);
+    #endif
+
+    #if LDR_PORT
+      Serial.print(F(" LDR (room board) on port "));
+      Serial.println(LDR_PORT);
+    #endif
+
+    #if PIR_PORT
+      Serial.print(F(" PIR (room board) on port "));
+      Serial.println(PIR_PORT);
+    #endif
+
+    #if LCD_PORT
+      Serial.print(F(" LCD display on port "));
+      Serial.println(LCD_PORT);
+    #endif
+
 	#endif
+
+  Serial.print(F(" verbose output "));
+  Serial.println( (eepromFlags & FLAG_VERBOSE) ? "on" : "off" );
 	
 	Serial.println();
 	Serial.println(F("Commands:"));
@@ -428,17 +499,18 @@ void displaySettings(void) {
 
 	#if RECEIVER_NODE
 	Serial.println(F(" a<0/1> - turn acks on or off. Valid values: 0 - off, 1 - on"));
-	Serial.println(F(" v<0/1> - turn verbose output on or off. Valid values: 0 - off, 1 - on"));
-
 	#else
 	Serial.println(F(" n<nn> - set node id. Valid values: 2 - 30"));
 	Serial.println(F(" i<nnn> - set interval. Valid values: multiples of 10 from 10 to 2550"));
-	Serial.println(F(" p<n> <s> - set port n to sensor type s. Valid values: 1-4 for port,"));
-	Serial.println(F("            sensor: 1 - none, 2 - auto, 3 - ldr, 4 - pulse"));	
-	Serial.println(F(" s - test sensors on all ports and report readings"));
-	Serial.println(F(" s<n> - test sensor on port n and report reading"));
-	Serial.println(F(" t - send a test radio packet"));
+//	Serial.println(F(" p<n> <s> - set port n to sensor type s. Valid values: 1-4 for port,"));
+//  Serial.println(F("            sensor: 1 - disabled, 2 - auto, 3 - ldr, 4 - pulse"));
+  Serial.println(F(" s - test sensors on all ports"));
+//  Serial.println(F(" s - test sensors on all ports and report readings"));
+//	Serial.println(F(" s<n> - test sensor on port n and report reading"));
+	Serial.println(F(" r - send a test radio packet"));
 	#endif
+
+  Serial.println(F(" v<0/1> - turn verbose output on or off. Valid values: 0 - off, 1 - on"));
 
 	Serial.println();
 }
@@ -466,36 +538,40 @@ void parseCommand(char *buffer, uint8_t len) {
 			Serial.println(myGroupID);
 		}
 		break;
+
+  // verbose
+  case 'v':
+    if (len > 1) {
+      if (parseInt(&buffer[1], 0, 1) == 1) {
+        // set flag
+        eepromFlags |= FLAG_VERBOSE;
+      }
+      else {
+        // unset flag
+        eepromFlags &= (0xFF - FLAG_VERBOSE);
+      }
+      Serial.print(F("Verbose output set to "));
+      Serial.println( (eepromFlags & FLAG_VERBOSE) ? "on" : "off" );
+    }
+    break;
 	
-	#if defined(RECEIVER_NODE)
+	#if RECEIVER_NODE
 
 	// acks
 	case 'a':
 		if (len > 1) {
 			if (parseInt(&buffer[1], 0, 1) == 1) {
-				receiverFlags |= RX_FLAG_ACK;
+        // set flag
+				eepromFlags |= FLAG_ACK;
 			}
 			else {
-				receiverFlags &= (0xFF - RX_FLAG_ACK);
+        // unset flag
+				eepromFlags &= (0xFF - FLAG_ACK);
 			}
 			Serial.print(F("Acknowledgements set to "));
-			Serial.println( (receiverFlags & RX_FLAG_ACK) ? "on" : "off" );
+			Serial.println( (eepromFlags & FLAG_ACK) ? "on" : "off" );
 		}
 		break;
-
-	// verbose
-	case 'v':
-		if (len > 1) {
-			if (parseInt(&buffer[1], 0, 1) == 1) {
-				receiverFlags |= RX_FLAG_VERBOSE;
-			}
-			else {
-				receiverFlags &= (0xFF - RX_FLAG_VERBOSE);
-			}
-			Serial.print(F("Verbose output set to "));
-			Serial.println( (receiverFlags & RX_FLAG_VERBOSE) ? "on" : "off" );
-		}
-		break;	
 	#else
 	
 	// node
@@ -527,7 +603,7 @@ void parseCommand(char *buffer, uint8_t len) {
 			Serial.print(F(" set to "));
 			switch (sensorType) {
 			case SENSOR_NONE:
-				Serial.println(F("none"));
+				Serial.println(F("disabled"));
 				break;
 			case SENSOR_AUTO:
 				Serial.println(F("auto"));
@@ -574,6 +650,23 @@ void parseCommand(char *buffer, uint8_t len) {
 	
 		break;
 		}
+
+	case 'r':
+	  {
+	  Serial.flush();
+    uint8_t power = findMinTransmitPower();
+    if (power == NO_RESPONSE) {
+      Serial.println(F("No response from receiver"));
+    }
+    else {
+      Serial.print(F("Got response at power level "));
+      Serial.print(power);
+      Serial.println(F(" (0 max, 7 min)"));
+    }
+
+    break;
+    }
+
 	#endif
 	}
 }

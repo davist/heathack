@@ -202,31 +202,34 @@ public:
   
   void reading (HeatHackData& packet) {
 
+    // nasty hack, but without it the DHT only works if DEBUG
+    // is enabled or the LCD is plugged in!
+    delay(10);
+
     if (type == SENSOR_NONE) return;
 
     enablePower();
     bool success = readRawData();
 
-//      #if DEBUG
+#if DEBUG
     if (!success) {
-      Serial.println("readRawData failed");
+      Serial.println(F("DHT readRawData failed"));
       serialFlush();
     }
     else {
-        Serial.print("data: ");
+        Serial.print(F("DHT data: "));
         Serial.print(data[0], DEC);
-        Serial.print(" ");
+        Serial.print(F(" "));
         Serial.print(data[1], DEC);
-        Serial.print(" ");
+        Serial.print(F(" "));
         Serial.print(data[2], DEC);
-        Serial.print(" ");
+        Serial.print(F(" "));
         Serial.print(data[3], DEC);
-        Serial.print(" ");
+        Serial.print(F(" "));
         Serial.println(data[4], DEC);
         serialFlush();
     }
-//      #endif
-
+#endif
 
     disablePower();
 
@@ -627,23 +630,23 @@ public:
   // take readings for all connected devices
   void reading (HeatHackData& packet) {
 
-	enablePower();	
-    requestTemperatures();
+    enablePower();
+      requestTemperatures();
 
-	HHReading reading;
-	reading.setPort(portNum);
-	reading.sensorType = HHSensorType::TEMPERATURE;
+    HHReading reading;
+    reading.setPort(portNum);
+    reading.sensorType = HHSensorType::TEMPERATURE;
 
-	for (uint8_t i=0; i < numDevices; i++) {
-		reading.setSensor(i + 1);
-		reading.encodedReading = getTemp(deviceAddress[i]);
+    for (uint8_t i=0; i < numDevices; i++) {
+      reading.setSensor(i + 1);
+      reading.encodedReading = getTemp(deviceAddress[i]);
 
-		if (reading.encodedReading != DS18B_INVALID_TEMP) {
-			packet.addReading(reading);
-		}
+      if (reading.encodedReading != DS18B_INVALID_TEMP) {
+        packet.addReading(reading);
+      }
     }
-	
-	disablePower();
+
+    disablePower();
   }
   
   uint8_t getNumDevices(void) {
@@ -702,26 +705,26 @@ protected:
     ScratchPad scratchPad;
 
     if (!isConnected(deviceAddress, scratchPad)) {
-		return DS18B_INVALID_TEMP;
-	}
-	else {
-		int16_t temp = 
-			// start with the whole degrees
-			((((int16_t) scratchPad[TEMP_MSB]) << 4) | (scratchPad[TEMP_LSB] >> 4)) * 10;
+      return DS18B_INVALID_TEMP;
+    }
+    else {
+      int16_t temp =
+        // start with the whole degrees
+        ((((int16_t) scratchPad[TEMP_MSB]) << 4) | (scratchPad[TEMP_LSB] >> 4)) * 10;
 
-		// add on the 1/10ths
-		
-		// depending on the resolution, some of the low bits are undefined, so mask them off		
-		uint8_t fraction16ths = scratchPad[TEMP_LSB] & DS18B_TEMP_MASK;
-		
-		// convert fraction in 1/16ths to 1/10ths
-		if (fraction16ths & DS18B_HALF)      temp += 5;
-		if (fraction16ths & DS18B_QUARTER)   temp += 2;
-		if (fraction16ths & DS18B_EIGHTH)    temp += 1;
-		if (fraction16ths & DS18B_SIXTEENTH) temp += 1;
-		
-		return temp;
-	}
+      // add on the 1/10ths
+
+      // depending on the resolution, some of the low bits are undefined, so mask them off
+      uint8_t fraction16ths = scratchPad[TEMP_LSB] & DS18B_TEMP_MASK;
+
+      // convert fraction in 1/16ths to 1/10ths
+      if (fraction16ths & DS18B_HALF)      temp += 5;
+      if (fraction16ths & DS18B_QUARTER)   temp += 2;
+      if (fraction16ths & DS18B_EIGHTH)    temp += 1;
+      if (fraction16ths & DS18B_SIXTEENTH) temp += 1;
+
+      return temp;
+    }
   }
   
 
@@ -729,7 +732,23 @@ protected:
   // also allows for updating the read scratchpad
   bool isConnected(const uint8_t* deviceAddress, uint8_t* scratchPad) {
     readScratchPad(deviceAddress, scratchPad);
-    return (oneWire.crc8(scratchPad, 8) == scratchPad[SCRATCHPAD_CRC]);
+
+    // if device gets disconnected, scratchpad will be all zeros, but the
+    // crc will be correct :(
+    if (scratchPad[0] == 0 &&
+        scratchPad[1] == 0 &&
+        scratchPad[2] == 0 &&
+        scratchPad[3] == 0 &&
+        scratchPad[4] == 0 &&
+        scratchPad[5] == 0 &&
+        scratchPad[6] == 0 &&
+        scratchPad[7] == 0 &&
+        scratchPad[8] == 0) {
+      return false;
+    }
+    else {
+      return (oneWire.crc8(scratchPad, 8) == scratchPad[SCRATCHPAD_CRC]);
+    }
   }
 
   // read device's scratch pad
@@ -741,10 +760,10 @@ protected:
 
     // read the response
 
-	for (uint8_t i=0; i<9; i++) {
-		*scratchPad = oneWire.read();
-		scratchPad++;
-	}
+    for (uint8_t i=0; i<9; i++) {
+      *scratchPad = oneWire.read();
+      scratchPad++;
+    }
 	
     // byte 0: temperature LSB
     // byte 1: temperature MSB
@@ -765,6 +784,17 @@ protected:
     // SCTRACHPAD_CRC
 
     oneWire.reset();
+
+#if DEBUG
+    Serial.print(F("DS18B data: "));
+    scratchPad -= 9;
+    for (uint8_t i=0; i<9; i++) {
+      Serial.print(scratchPad[i], DEC);
+      Serial.print(F(" "));
+    }
+    Serial.println();
+    serialFlush();
+#endif
   }
 
   // writes device's scratch pad
@@ -812,8 +842,10 @@ public:
 		byte bus = determineBus();
 
 		if (bus == BUS_I2C) {
-			Serial.print(F(" (I2C) "));
-			Serial.flush();
+      #if DEBUG
+        Serial.print(F(" (I2C) "));
+        Serial.flush();
+      #endif
 
 			type = probeI2C();
 
@@ -823,14 +855,18 @@ public:
 			}
 		}
 		else if (bus == BUS_SWITCHED_POWER) {
-			Serial.print(F(" (SwPwr) "));
-			Serial.flush();
+      #if DEBUG
+			  Serial.print(F(" (SwPwr) "));
+			  Serial.flush();
+      #endif
 
 			type = probeSwitchedPower();
 		}
+#if DEBUG
 		else {
 			Serial.print(F(" (Unknown) "));
 		}
+#endif
 		
 		// turn off A pin power
 		mode2(INPUT);
@@ -956,11 +992,13 @@ private:
 		// check what's on DIO
 		delay(DS18B_POWERUP_TIME_MS);
 		byte DFWhenAHigh = digiRead();
-		
+
+#if DEBUG
 		Serial.print(DFWhenAHigh ? "H" : "L");
 		Serial.print(DFWhenALow ? "H" : "L");
 		Serial.print(DPWhenAHigh ? "H" : "L");
 		Serial.print(DPWhenALow ? "H" : "L");
+#endif
 		
 		// what does it all mean?
 		if (DFWhenAHigh && !DFWhenALow && DPWhenAHigh && !DPWhenALow) {

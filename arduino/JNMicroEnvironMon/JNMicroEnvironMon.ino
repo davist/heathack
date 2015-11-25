@@ -144,7 +144,7 @@ static void printInterval(void) {
 
 /////////////////////////////////////////////////////////////////////
 inline void displaySettings(void) {
-  Serial.write("\r\n");
+  Serial.write("\r\n v" VERSION " ");
   printGroup();
   printNode();
   printInterval();

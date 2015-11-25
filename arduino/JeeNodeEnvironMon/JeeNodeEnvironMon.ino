@@ -1,11 +1,6 @@
 /**
  * Default setup is:
  *
- * - Room board on ports 2 and 3 with the PIR sensor pointing away from the other ports.
- * With the writing on the room board the right way up, port 2 is on the left and port 3 on the right.
- * This means the HYT131 temp/humidity sensor is on port 2, LDR light sensor on port 3 A pin and
- * PIR motion sensor on port 3 D pin.
- *
  * - A OneWire bus on port 4 data pin supporting multiple DS18B temp sensors.
  * If power is drawn from the A pin instead of +, then the sensors will only be powered
  * when needed to avoid wasting power.
@@ -15,13 +10,24 @@
  * - DHT11/22 temp/humidty sensor on port 1 with its data line connected to the D pin. Again, A
  * can be used instead of + to power it only when taking readings.
  *
+ * - LCD display on port 2. If connected it will be used to display readings.
+ *
  * To enable/disable the various sensors depending on your setup, comment/uncomment the lines
  * defining the port for the relevant sensor.
  *
- * If the LCD display is connected and enabled it will be used to display readings.
+ * Room board should be connected to ports 2 and 3 with the PIR sensor pointing away from the other ports.
+ * With the writing on the room board the right way up, port 2 is on the left and port 3 on the right.
+ * This means the HYT131 temp/humidity sensor is on port 2, LDR light sensor on port 3 A pin and
+ * PIR motion sensor on port 3 D pin.
  */
 
-#define DEBUG true
+#define DEBUG false
+
+#if DEBUG
+  #define DEBUG_INDICATOR "D"
+#else
+  #define DEBUG_INDICATOR ""
+#endif
 
 // dht11/22 temp/humidity
 #define DHT_PORT 1
@@ -37,7 +43,7 @@
 //#define PIR_PORT    3   // motion detector
 
 // LCD display
-//#define LCD_PORT 1
+#define LCD_PORT 2
 
 #include <Arduino.h>
 #include "JeeLib.h"
@@ -70,6 +76,7 @@
 #if LCD_PORT
   PortI2C lcdI2C(LCD_PORT);
   LiquidCrystalI2C lcd(lcdI2C);
+  bool isLCDEnabled = false;
 #endif
 
 #if PIR_PORT
@@ -198,7 +205,20 @@ void doMeasure() {
 
 /////////////////////////////////////////////////////////////////////
 #if LCD_PORT
+
+bool isLCDConnected(void) {
+
+  // need to pass address as top 7 bits with lsb indicating read/write
+  bool result = lcdI2C.start(I2C_LCD << 1);
+  delayMicroseconds(150);
+  lcdI2C.stop();
+
+  return result;
+}
+
 void displayReadingsOnLCD(void) {
+
+  if (!isLCDEnabled) return;
 
   lcd.clear();
 
@@ -219,7 +239,8 @@ void displayReadingsOnLCD(void) {
         break;
     }
 
-    lcd.print(dataPacket.readings[i].sensorNumber);
+    lcd.print(dataPacket.readings[i].getPort());
+    lcd.print(dataPacket.readings[i].getSensor());
     lcd.print(F(":"));
     lcd.print(dataPacket.readings[i].getIntPartOfReading());
 
@@ -237,7 +258,7 @@ void displayReadingsOnLCD(void) {
 /////////////////////////////////////////////////////////////////////
 void setup() {
 
-  // wait for things to stablise
+  // wait for things to stabilise
   delay(1000);
 
   readEeprom();
@@ -245,32 +266,42 @@ void setup() {
   uint8_t mins, secs;
 
   #if LCD_PORT
-    lcd.begin(LCD_WIDTH, LCD_HEIGHT);
-    lcd.noBacklight();
 
-    mins = myInterval / 6;
-    secs = (myInterval % 6) * 10;
+    isLCDEnabled = isLCDConnected();
 
-    lcd.print(F("HeatHack E-Mon"));
-    lcd.setCursor(0,1);
-    lcd.print(F("G:"));
-    lcd.print(myGroupID);
-    lcd.print(F(" N:"));
-    lcd.print(myNodeID);
-    lcd.print(F(" I:"));
-    if (mins != 0) {
-      lcd.print(mins);
-      lcd.print(F("m"));
+    if (isLCDEnabled) {
+      lcd.begin(LCD_WIDTH, LCD_HEIGHT);
+      lcd.noBacklight();
+
+      mins = myInterval / 6;
+      secs = (myInterval % 6) * 10;
+
+      lcd.print(F("HeatHack v" VERSION DEBUG_INDICATOR));
+      lcd.setCursor(0,1);
+      lcd.print(F("G:"));
+      lcd.print(myGroupID);
+      lcd.print(F(" N:"));
+      lcd.print(myNodeID);
+      lcd.print(F(" I:"));
+      if (mins != 0) {
+        lcd.print(mins);
+        lcd.print(F("m"));
+      }
+      else {
+        lcd.print(secs);
+        lcd.print(F("s"));
+      }
     }
-    else {
-      lcd.print(secs);
-      lcd.print(F("s"));
-    }      
   #endif
   
   Serial.begin(BAUD_RATE);
   
-  Serial.println(F("JeeNode HeatHack Environment Monitor"));
+  Serial.println(F("JeeNode HeatHack Environment Monitor v" VERSION DEBUG_INDICATOR));
+
+  // initialise transmitter
+  rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
+  // power down
+  rf12_sleep(RF12_SLEEP);
 
   configConsole();
 
@@ -305,6 +336,7 @@ void setup() {
   #if LCD_PORT
     Serial.print(F("* LCD on port "));
     Serial.print(LCD_PORT);
+    Serial.print(isLCDEnabled ? ". Detected" : ". Not present");
     Serial.println();
     serialFlush();    
   #endif
@@ -362,15 +394,27 @@ void setup() {
   #endif
   
   serialFlush();
-  
+
+  // turn off serial if not debugging and not verbose
   #if !DEBUG
-    Serial.end();
+    if (!(eepromFlags & FLAG_VERBOSE)) Serial.end();
   #endif
 
-  // initialise transmitter
-  rf12_initialize(myNodeID, RF12_868MHZ, myGroupID);
+  // reinitialise LCD in case config has upset it (e.g. probing ports)
+  #if LCD_PORT
+    if (isLCDEnabled) {
+      pinMode(LCD_PORT + 13, OUTPUT);
+      lcd.begin(LCD_WIDTH, LCD_HEIGHT);
+      lcd.noBacklight();
+    }
+  #endif
 
-  // power down
+  // calculate transmit power to use
+  rf12_sleep(RF12_WAKEUP);
+  transmitPower = findMinTransmitPower();
+  if (transmitPower == NO_RESPONSE) transmitPower = 0;
+
+  // power down radio
   rf12_sleep(RF12_SLEEP);
 }
 

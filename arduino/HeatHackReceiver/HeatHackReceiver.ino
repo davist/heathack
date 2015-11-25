@@ -2,6 +2,7 @@
 #define RECEIVER_NODE true
 
 #include <JeeLib.h>
+#include <OneWire.h>
 #include <HeatHack.h>
 #include <HeatHackShared.h>
 
@@ -15,21 +16,22 @@ void setup() {
 
   Serial.begin(BAUD_RATE);
   
-  Serial.println("JeeNode HeatHack Receiver");
+  Serial.print("JeeNode HeatHack Receiver v");
+  Serial.println(VERSION);
 
   configConsole();
 
   Serial.println();  
-  Serial.print("Using group id ");
+  Serial.print(F("Using group id "));
   Serial.print(myGroupID);
-  Serial.print(" and node id ");
+  Serial.print(F(" and node id "));
   Serial.println(RECEIVER_NODE_ID);
   
-  if (receiverFlags & RX_FLAG_ACK) {
-    Serial.println("Acknowledgements enabled (this is the main receiver)");
+  if (eepromFlags & FLAG_ACK) {
+    Serial.println(F("Acknowledgements enabled (this is the main receiver)"));
   }
   else {
-    Serial.println("Acknowledgements disabled (this is a secondary receiver - listening only)");
+    Serial.println(F("Acknowledgements disabled (this is a secondary receiver - listening only)"));
   }
   Serial.println();  
   
@@ -53,7 +55,7 @@ void loop() {
 
     bool sentAck = false;
 
-    if (receiverFlags & RX_FLAG_ACK) {
+    if (eepromFlags & FLAG_ACK) {
       // send ack immediately to avoid delays caused by time taken to write to serial port
       if(RF12_WANTS_ACK){
         rf12_sendStart(RF12_ACK_REPLY, 0, 0);
@@ -74,7 +76,7 @@ void loop() {
       lastSequence[node-1] = data->sequence;
 
       // print out sensor readings on the serial port
-      // format is: heathack <node id> <port num><sensor num> <sensor type> <reading> <sensor num> <sensor type> <reading> ...(repeated for each reading)
+      // format is: heathack <node id> <port num><sensor num> <sensor type> <reading> <port num><sensor num> <sensor type> <reading> ...(repeated for each reading)
       // Note port and sensor numbers are combined to report a single two-digit sensor number
       
       // start each line with a known string so that the code reading from the serial port can ignore spurious data
@@ -117,14 +119,14 @@ void loop() {
       isRepeat = true;
     }
 
-    if (receiverFlags & RX_FLAG_VERBOSE) {
-      Serial.print("\n\rData from node ");
+    if (eepromFlags & FLAG_VERBOSE) {
+      Serial.print(F("\n\rData from node "));
       Serial.print(node);
-      Serial.print(" seq ");
+      Serial.print(F(" seq "));
       Serial.print(data->sequence);
 
       if (isRepeat) {        
-        Serial.print(" (repeated sequence id)");
+        Serial.print(F(" (repeated sequence id)"));
       }
       Serial.println();
       
@@ -135,11 +137,11 @@ void loop() {
 
         // "low battery" isn't a real sensor (not attached to a port) so ignore port/sensor number and always use 1
         if (sensorType != HHSensorType::LOW_BATT) {
-          Serial.print("port ");
+          Serial.print(F("port "));
           Serial.print(data->readings[i].getPort());
-          Serial.print(" sensor ");
+          Serial.print(F(" sensor "));
           Serial.print(data->readings[i].getSensor());
-          Serial.print(": ");
+          Serial.print(F(": "));
         }
         Serial.print(HHSensorTypeNames[sensorType]);
         Serial.print(" ");
@@ -155,7 +157,7 @@ void loop() {
       }
 
       if (sentAck) {
-        Serial.println("Sent ack");
+        Serial.println(F("Sent ack"));
         Serial.println();
       }
     }
