@@ -9,7 +9,7 @@
 // A change to the major indicates a break in compatibility between transmitter and receiver,
 // i.e. all devices on a network need the same major number to work together correctly.
 // Minor number is increased for non-breaking changes.
-#define VERSION "1.1"
+#define VERSION "1.2"
 
 
 // The serial port baud rate to use for all HeatHack devices

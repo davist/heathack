@@ -75,43 +75,12 @@ void loop() {
     if (data->sequence != lastSequence[node-1]) {
       lastSequence[node-1] = data->sequence;
 
-      // print out sensor readings on the serial port
-      // format is: heathack <node id> <port num><sensor num> <sensor type> <reading> <port num><sensor num> <sensor type> <reading> ...(repeated for each reading)
-      // Note port and sensor numbers are combined to report a single two-digit sensor number
-      
-      // start each line with a known string so that the code reading from the serial port can ignore spurious data
-      Serial.print("heathack ");
-      Serial.print(node);
-      Serial.print(" ");
-        
-      for (byte i=0; i<data->numReadings; i++) {
-        uint8_t sensorType = data->readings[i].sensorType;
+      // don't report test readings as they're just for testing the connection between transmitter and receiver
+      if (! (data->numReadings == 1 && data->readings[0].sensorType == HHSensorType::TEST)) {
 
-        if (sensorType == HHSensorType::LOW_BATT) {
-          // "low battery" isn't a real sensor (not attached to a port) so ignore port/sensor number and always use 1
-          Serial.print("1");
-        }
-        else {
-          Serial.print(data->readings[i].getPort());
-          Serial.print(data->readings[i].getSensor());
-        }
-        Serial.print(" ");
-        Serial.print(sensorType);
-        Serial.print(" ");
-        Serial.print(data->readings[i].getIntPartOfReading());
-        
-        uint8_t decimal = data->readings[i].getDecPartOfReading();        
-        if (decimal != NO_DECIMAL) {
-          // display as decimal value to 1 decimal place
-          Serial.print(".");
-          Serial.print(decimal);
-        }        
-        Serial.print(" ");
+        reportReadings(node, data);
       }
-
-      Serial.println();
-      serialFlush();
-
+      
       // flash LED to indicate packet received
       flashLED();
     }
@@ -135,8 +104,8 @@ void loop() {
 
         Serial.print("* ");
 
-        // "low battery" isn't a real sensor (not attached to a port) so ignore port/sensor number and always use 1
-        if (sensorType != HHSensorType::LOW_BATT) {
+        // ""test" and low battery" aren't real sensors (not attached to a port) so ignore port/sensor number
+        if (sensorType != HHSensorType::LOW_BATT && sensorType != HHSensorType::TEST) {
           Serial.print(F("port "));
           Serial.print(data->readings[i].getPort());
           Serial.print(F(" sensor "));
@@ -162,4 +131,43 @@ void loop() {
       }
     }
   }
+}
+
+void reportReadings(byte node, HeatHackData *data) {
+  // print out sensor readings on the serial port
+  // format is: heathack <node id> <port num><sensor num> <sensor type> <reading> <port num><sensor num> <sensor type> <reading> ...(repeated for each reading)
+  // Note port and sensor numbers are combined to report a single two-digit sensor number
+  
+  // start each line with a known string so that the code reading from the serial port can ignore spurious data
+  Serial.print("heathack ");
+  Serial.print(node);
+  Serial.print(" ");
+    
+  for (byte i=0; i<data->numReadings; i++) {
+    uint8_t sensorType = data->readings[i].sensorType;
+
+    if (sensorType == HHSensorType::LOW_BATT) {
+      // "low battery" isn't a real sensor (not attached to a port) so ignore port/sensor number and always use 1
+      Serial.print("1");
+    }
+    else {
+      Serial.print(data->readings[i].getPort());
+      Serial.print(data->readings[i].getSensor());
+    }
+    Serial.print(" ");
+    Serial.print(sensorType);
+    Serial.print(" ");
+    Serial.print(data->readings[i].getIntPartOfReading());
+    
+    uint8_t decimal = data->readings[i].getDecPartOfReading();        
+    if (decimal != NO_DECIMAL) {
+      // display as decimal value to 1 decimal place
+      Serial.print(".");
+      Serial.print(decimal);
+    }        
+    Serial.print(" ");
+  }
+
+  Serial.println();
+  serialFlush();
 }
