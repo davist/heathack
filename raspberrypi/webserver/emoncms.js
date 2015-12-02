@@ -6,6 +6,24 @@
 
 var request = require('request');
 
+//BEGIN JCC temp 1 dec 15 make it possible to see if we're in verbose mode
+var config = require("./config"); 
+//END JCC temp 1 dec 15
+
+
+//BEGIN JCC TEMP 1 dec 15 add helper function test for empty object, pre-ECMA5 style.
+// there may be better ways to test than this.
+
+function isEmpty(obj) {
+    for(var prop in obj) {
+        if(obj.hasOwnProperty(prop))
+            return false;
+    }
+
+    return true;
+}
+//END JCC TEMP 1 dec 15 
+
 
 // constructor
 var constructor = function(config) {
@@ -23,7 +41,12 @@ var constructor = function(config) {
 // min and max = 0 means allow all values
 var sensorTypes = {
 	0: { name: "test",        min: 0, max: 0 },
-	1: { name: "temperature", min: -20, max: 50 },
+        //BEGIN JCC 2 Dec 15
+        // max temperature was 50; 84 allows us to measure most boiler
+        // feeds without accidentally thinking a DS18 initial reading of 85
+        // is real.
+	1: { name: "temperature", min: -20, max: 84 }, 
+        //END JCC
 	2: { name: "humidity",    min: 0, max: 100 },
 	3: { name: "light",       min: 0, max: 255 },
 	4: { name: "movement",    min: 0, max: 0 },
@@ -37,20 +60,30 @@ var	serverUrlTemplate = "http://$server/input/post.json?node=$node&json=$json&ap
 var publish = function(nodeid, readings) {
 
 	var json = formatJson(readings);
-
-	var url = this.urlTemplate
-				.replace("$node", this.nodeid_offset + nodeid)
+        //BEGIN JCC TEMP 1 dec 15 add test for json of {} (if/else structure)
+        if (isEmpty(json)) {
+	 console.log("blocked a reading for violating min/max conditions");
+        } else {
+	  var url = this.urlTemplate
+  				.replace("$node", this.nodeid_offset + nodeid)
 				.replace("$json", JSON.stringify(json));
+          if (config.verbose) {
+ 	    console.log(url)
+          }
+        
 				
-	request(url, function (error, response, body) {
-	  if (error) {
-		console.log("Error publishing to EmonCMS server: " + error);
-	  }
-	  else if (response.statusCode != 200) {
+  	  request(url, function (error, response, body) {
+	    if (error) {
+	 	  console.log("Error publishing to EmonCMS server: " + error);
+	    }
+	    else if (response.statusCode != 200) {
 		console.log(response.statusCode + " response from EmonCMS server: " + body);
-	  }
-	});
-};
+	    }
+          }
+        )};
+        //END JCC TEMP 1 dec 15 add test for json of {} (if/else structure)
+    }
+
 	
 var formatJson = function(readings) {
 	
@@ -74,7 +107,12 @@ var formatJson = function(readings) {
 			}
 		}
 	}
-	
+       //BEGIN JCC add debugging trace 1 dec 15
+        if (config.verbose) {
+           console.log(JSON.stringify(json)); 
+	}
+       //END JCC add debugging trace 1 dec 15
+
 	return json;
 };
 
