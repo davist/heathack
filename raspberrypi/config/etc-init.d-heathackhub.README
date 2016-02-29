@@ -1,0 +1,34 @@
+#ensure any existing cron job or rc.local entry is removed
+
+# install the 'forever' command globally
+sudo npm install forever -g
+
+# install heathackhub script in /etc/init.d
+sudo cp etc-init.d-heathackhub /etc/init.d/heathackhub
+
+# edit heathackhub to point at correct folder, if necessary (HUB_DIR=...)
+sudo nano /etc/init.d/heathackhub
+
+# ensure permissions are set correctly
+sudo chmod 755 /etc/init.d/heathackhub
+
+# configure heathackhub to run at boot
+sudo update-rc.d heathackhub defaults
+
+# prevent the log filling up with every sensor reading (only want error messages in the log)
+cd /home/pi/heathackhub
+sudo nano config.js
+# set config.verbose = false
+
+
+
+# to manually start hub
+sudo service heathackhub start
+
+# to manually stop hub
+sudo service heathackhub stop
+
+# to check logs
+tail /home/pi/.forever/heathackhub.log
+
+# if serial port for JeeLink can't be opened, heathackhub will keep restarting and errors will appear in the log

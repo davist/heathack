@@ -21,8 +21,9 @@ function readableTime(t) {
 	if (tSecs < 60) return tSecs + "s";
 	if (tSecs < 120) return Math.floor(tSecs / 60) + "m " + (tSecs % 60) + "s";
 	if (tSecs < 3600) return Math.floor(tSecs / 60) + "m";
-	if (tSecs < 7200) "1h " + Math.floor(tSecs / 60) + "m";
-	return (tSecs / 3600) + "h";
+	if (tSecs < 7200) return "1h " + Math.floor(tSecs / 60) + "m";
+	if (tSecs < 172800) return Math.floor(tSecs / 3600) + "h";
+	return Math.floor(tSecs / 86400) + "d";
 }
 
 function agedColour(t, maxT) {
@@ -54,23 +55,31 @@ function updateCurrent(data) {
 		}).appendTo(nodeDiv);
 
 		$.each(node.sensors, function(sensorid, sensor) {
+		
+			var typeID = 0;
+
+			// check sensor.type is valid
+			if (SensorType[sensor.type]) {
+				typeID = sensor.type;
+			}
+		
 			// only include low battery when it's reporting a low battery
-			if (sensor.type == 7 && sensor.readings[sensor.lastReading] == 0) return;
+			if (typeID == 7 && sensor.readings[sensor.lastReading] == 0) return;
 
 			var sensorDiv = $("<div/>", {
 				"class": "sensor"
 			});
 			
-			if (sensor.type == 7) {
+			if (typeID == 7) {
 				$(sensorDiv).addClass("warning");
 			}
 
 			$("<span/>", {
 				"class": "sensortype",
-				"html" : SensorType[sensor.type].name
+				"html" : SensorType[typeID].name
 			}).appendTo(sensorDiv);
 
-			if (sensor.type != 7) {
+			if (typeID != 7) {
 				$("<span/>", {
 					"class": "reading",
 					"html" : sensor.readings[sensor.lastReading]
@@ -78,7 +87,7 @@ function updateCurrent(data) {
 
 				$("<span/>", {
 					"class": "unit",
-					"html" : SensorType[sensor.type].unit
+					"html" : SensorType[typeID].unit
 				}).appendTo(sensorDiv);
 			}
 
@@ -115,8 +124,16 @@ function updateHistory(data) {
 		}).appendTo(nodeDiv);
 
 		$.each(node.sensors, function(sensorid, sensor) {
-			// don't inclode low battery in history
-			if (sensor.type == 7) return;
+
+			var typeID = 0;
+
+			// check sensor.type is valid
+			if (SensorType[sensor.type]) {
+				typeID = sensor.type;
+			}
+		
+			// don't include low battery in history
+			if (typeID == 7) return;
 		
 			var sensorDiv = $("<div/>", {
 				"class": "sensor-history"
@@ -124,11 +141,11 @@ function updateHistory(data) {
 	
 			$("<span/>", {
 				"class": "sensortype",
-				"html" : SensorType[sensor.type].name
+				"html" : SensorType[typeID].name
 			}).appendTo(sensorDiv);
 
-			var unit = SensorType[sensor.type].unit;
-			var divisor = SensorType[sensor.type].maximum / 150;
+			var unit = SensorType[typeID].unit;
+			var divisor = SensorType[typeID].maximum / 150;
 
 			function renderReading(reading, index) {
 				var height = Math.floor(reading / divisor);
@@ -160,7 +177,7 @@ function updateHistory(data) {
 
 SensorType = {
 
-0: {name: "Test", unit: "", maximum: 0},
+0: {name: "Unknown", unit: "", maximum: 0},
 1: {name: "Temp", unit: "C", maximum: 30},
 2: {name: "Hum", unit: "%", maximum: 100},
 3: {name: "Light", unit: "", maximum: 255},
