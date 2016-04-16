@@ -42,7 +42,7 @@ function updateCurrent(data) {
 
 	$.each(data.nodes, function(nodeid, node) {
 	
-		var time = Date.now() - node.lastReadingTime;
+		var time = data.currentTime - node.lastReadingTime;
 		
 		var nodeDiv = $("<div/>", {
 			"class": "node-current"

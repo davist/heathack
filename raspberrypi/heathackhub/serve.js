@@ -23,7 +23,10 @@ var nodeData = {
 	nodes: {},
 	
 	// number of previous readings to store
-	maxReadings: 20
+	maxReadings: 20,
+    
+    // current time to allow client to calculate time since each reading
+    currentTime: null
 };
 
 
@@ -36,6 +39,7 @@ app.use(express.static("./static"));
 
 app.get("/data", function(req, res) {
 
+    nodeData.currentTime = Date.now();
 	res.writeHead(200, {"Content-Type": "application/json" });
 	res.end( JSON.stringify(nodeData) );
 });
