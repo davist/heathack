@@ -1,6 +1,9 @@
 // enable code in HeatHack lib that's just for decoding received packets
 #define RECEIVER_NODE true
 
+// make rfm69 radio operate in rf12 mode
+#define RF69_COMPAT 1
+
 #include <JeeLib.h>
 #include <OneWire.h>
 #include <HeatHack.h>
@@ -34,6 +37,7 @@ void setup() {
     Serial.println(F("Acknowledgements disabled (this is a secondary receiver - listening only)"));
   }
   Serial.println();  
+  Serial.flush();
   
   // initialise transceiver
   rf12_initialize(RECEIVER_NODE_ID, RF12_868MHZ, myGroupID);
