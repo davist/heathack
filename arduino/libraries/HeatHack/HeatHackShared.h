@@ -260,6 +260,9 @@ inline void doSleep(void) {
   if ((millis() - lastAckTime) > ((uint32_t)MAX_SECS_WITHOUT_ACK) * 1000) {
     hibernating = true;
   }
+  else {
+    hibernating = false;
+  }
   
   // calculate time till next measure and report
   uint32_t delayMs;
@@ -507,7 +510,8 @@ void displaySettings(void) {
   Serial.println(F(" s - test sensors on all ports"));
 //  Serial.println(F(" s - test sensors on all ports and report readings"));
 //	Serial.println(F(" s<n> - test sensor on port n and report reading"));
-	Serial.println(F(" r - send a test radio packet"));
+  Serial.println(F(" r - send a test radio packet"));
+  Serial.println(F(" rr - repeatedly test radio (reset JeeNode to exit)"));
 	#endif
 
   Serial.println(F(" v<0/1> - turn verbose output on or off. Valid values: 0 - off, 1 - on"));
@@ -643,6 +647,12 @@ void parseCommand(char *buffer, uint8_t len) {
 				case SENSOR_LCD:
 					Serial.println(F("LCD"));
 					break;
+				case SENSOR_RTC:
+					Serial.println(F("RTC"));
+					break;
+				case SENSOR_I2C_UNKNOWN:
+					Serial.println(F("Unknown I2C"));
+					break;
 				default:
 					Serial.println(F("None"));
 			}
@@ -653,16 +663,23 @@ void parseCommand(char *buffer, uint8_t len) {
 
 	case 'r':
 	  {
-	  Serial.flush();
-    uint8_t power = findMinTransmitPower();
-    if (power == NO_RESPONSE) {
-      Serial.println(F("No response from receiver"));
-    }
-    else {
-      Serial.print(F("Got response at power level "));
-      Serial.print(power);
-      Serial.println(F(" (0 max, 7 min)"));
-    }
+	  bool repeat = false;
+	  if (len > 1 && buffer[1] == 'r') repeat = true;
+
+	  do {
+      Serial.flush();
+      uint8_t power = findMinTransmitPower();
+      if (power == NO_RESPONSE) {
+        Serial.println(F("No response from receiver"));
+      }
+      else {
+        Serial.print(F("Got response at power level "));
+        Serial.print(power);
+        Serial.println(F(" (0 max, 7 min)"));
+      }
+
+      if (repeat) delay(2000);
+	  } while (repeat);
 
     break;
     }

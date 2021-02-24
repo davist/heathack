@@ -9,7 +9,7 @@
 // A change to the major indicates a break in compatibility between transmitter and receiver,
 // i.e. all devices on a network need the same major number to work together correctly.
 // Minor number is increased for non-breaking changes.
-#define VERSION "1.2"
+#define VERSION "1.3"
 
 
 // The serial port baud rate to use for all HeatHack devices
@@ -107,6 +107,7 @@
 #define SENSOR_LCD   5
 #define SENSOR_LDR   3   // light-dependent resistor between AIO and GND pins
 #define SENSOR_PULSE 4   // pulsed input on DIO pin (e.g. hall-effect switch or photo-detector for meter reading)
+#define SENSOR_RTC   6   // Real time clock
 
 // max sensor type number that can be entered in config console
 #define SENSOR_MIN 1

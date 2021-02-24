@@ -22,6 +22,7 @@
 #define MAX_I2C_ADDR 120
 #define I2C_HYT131 0x28
 #define I2C_LCD 0x24
+#define I2C_RTC 0x68
 
 
 #ifndef DHT_USE_INTERRUPTS
@@ -913,6 +914,7 @@ private:
 				switch (activeAddr) {
 				case I2C_HYT131: type = SENSOR_HYT131; break;
 				case I2C_LCD: type = SENSOR_LCD; break;
+				case I2C_RTC: type = SENSOR_RTC; break;
 				default: type = SENSOR_I2C_UNKNOWN;
 				}
 			}
