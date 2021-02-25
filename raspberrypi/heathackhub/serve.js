@@ -1,17 +1,17 @@
-var serialport = require("serialport");
-var express = require("express");
-var config = require("./config");
+const serialport = require("serialport");
+const express = require("express");
+const config = require("./config");
 
 // load configured publisher
-var publishAPI = require('./' + config.publisher);
+const publishAPI = require('./' + config.publisher);
 
-var publisher = new publishAPI.Publisher(config.publish_settings);
+const publisher = new publishAPI.Publisher(config.publish_settings);
 
 
-var SP = serialport.SerialPort;
+const SP = serialport.SerialPort;
 
 // JeeLink on USB0 at 9600 baud default
-var serial = new SP(config.serialport || "/dev/ttyUSB0", {
+const serial = new SP(config.serialport || "/dev/ttyUSB0", {
 	baudrate: config.baudrate || 9600,
 	parser: serialport.parsers.readline("\r\n")
 });
@@ -19,7 +19,7 @@ var serial = new SP(config.serialport || "/dev/ttyUSB0", {
 ///////////////////////////
 // data structure to hold readings which the web server publishes
 
-var nodeData = {
+const nodeData = {
 	nodes: {},
 
 	// number of previous readings to store
@@ -33,7 +33,7 @@ var nodeData = {
 ///////////////////////////
 // web server
 
-var app = express();
+const app = express();
 
 app.use(express.static("./static"));
 
@@ -64,16 +64,16 @@ serial.on("open", function() {
 	serial.on("data", function(data) {
 
 		// split string into tokens
-		var tokens = data.toString().split(" ");
+		const tokens = data.toString().split(" ");
 
 		// if first token (word) isn't "heathack", it's not valid data
-		if (tokens[0] != "heathack") return;
+		if (tokens[0] !== "heathack") return;
 
 		// next token is node id
-		var nodeid = tokens[1];
+		const nodeid = tokens[1];
 
 		// get the relevant node object
-		var node = nodeData.nodes[nodeid];
+		const node = nodeData.nodes[nodeid];
 
 		// if it doesn't exist, create a new one
 		if (!node) {
@@ -88,18 +88,18 @@ serial.on("open", function() {
 		// rest of tokens are tuples of sensor id, type and value
 
 		// data to publish to emoncms
-		var curReadings = [];
+		const curReadings = [];
 
-		for (var i=2; i<tokens.length - 2; i+=3) {
+		for (let i=2; i<tokens.length - 2; i+=3) {
 
-			var sensorid = tokens[i];
-			var type = tokens[i+1];
-			var value = tokens[i+2];
+			const sensorid = tokens[i];
+			const type = tokens[i+1];
+			const value = tokens[i+2];
 
 			curReadings.push( {id: sensorid, type: type, value: value} );
 
 			// find sensor object on node
-			var sensor = node.sensors[sensorid];
+			let sensor = node.sensors[sensorid];
 
 			// if it doesn't exist, create a new one
 			if (!sensor) {

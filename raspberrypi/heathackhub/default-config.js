@@ -1,4 +1,4 @@
-var config = {};
+const config = {};
 config.publish_settings = {};
 
 // set verbose to true to get each reading reported on the command line

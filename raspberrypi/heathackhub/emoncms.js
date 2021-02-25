@@ -8,7 +8,7 @@ const fetch = require('node-fetch');
 
 
 // constructor
-var constructor = function(config) {
+const constructor = function(config) {
 	this.server = config.server || "emoncms.org";
 	this.apikey = config.apikey;
 	this.nodeid_offset = config.nodeid_offset || 0;
@@ -21,7 +21,7 @@ var constructor = function(config) {
 
 // names and ranges for sensor types in numerial order from zero.
 // min and max = 0 means allow all values
-var sensorTypes = {
+const sensorTypes = {
 	0: { name: "test",        min: 0, max: 0 },
 	1: { name: "temperature", min: -20, max: 50 },
 	2: { name: "humidity",    min: 0, max: 100 },
@@ -32,13 +32,13 @@ var sensorTypes = {
 	7: { name: "lowbatt",     min: 0, max: 0 }
 };
 
-var	serverUrlTemplate = "http://$server/input/post.json?node=$node&json=$json&apikey=$key";
+const	serverUrlTemplate = "http://$server/input/post.json?node=$node&json=$json&apikey=$key";
 
-var publish = function(nodeid, readings) {
+const publish = function(nodeid, readings) {
 
-	var json = formatJson(readings);
+	const json = formatJson(readings);
 
-	var url = this.urlTemplate
+	const url = this.urlTemplate
 				.replace("$node", this.nodeid_offset + nodeid)
 				.replace("$json", JSON.stringify(json));
 
@@ -55,16 +55,14 @@ var publish = function(nodeid, readings) {
 	.catch(error => console.log("Error publishing to EmonCMS server: " + error));
 };
 
-var formatJson = function(readings) {
+const formatJson = function(readings) {
 
-	var json = {};
+	const json = {};
 
-	for (var i in readings) {
-		var reading = readings[i];
-
-		var id = reading.id;
-		var type = parseInt(reading.type);
-		var value = parseFloat(reading.value);
+	for (let reading of readings) {
+		const id = reading.id;
+		const type = parseInt(reading.type);
+		const value = parseFloat(reading.value);
 
 		// sanity check the readings and ignore if out of range
 		if (type > 0 && type <= 7) {
