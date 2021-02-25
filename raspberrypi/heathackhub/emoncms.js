@@ -17,7 +17,7 @@ var constructor = function(config) {
 	this.urlTemplate = serverUrlTemplate
 				.replace("$server", this.server)
 				.replace("$key", this.apikey);
-}
+};
 
 // names and ranges for sensor types in numerial order from zero.
 // min and max = 0 means allow all values
@@ -33,7 +33,7 @@ var sensorTypes = {
 };
 
 var	serverUrlTemplate = "http://$server/input/post.json?node=$node&json=$json&apikey=$key";
-	
+
 var publish = function(nodeid, readings) {
 
 	var json = formatJson(readings);
@@ -41,7 +41,7 @@ var publish = function(nodeid, readings) {
 	var url = this.urlTemplate
 				.replace("$node", this.nodeid_offset + nodeid)
 				.replace("$json", JSON.stringify(json));
-				
+
 	request(url, function (error, response, body) {
 	  if (error) {
 		console.log("Error publishing to EmonCMS server: " + error);
@@ -51,21 +51,21 @@ var publish = function(nodeid, readings) {
 	  }
 	});
 };
-	
+
 var formatJson = function(readings) {
-	
+
 	var json = {};
 
-	for (i in readings) {
+	for (var i in readings) {
 		var reading = readings[i];
-	
+
 		var id = reading.id;
 		var type = parseInt(reading.type);
 		var value = parseFloat(reading.value);
-		
+
 		// sanity check the readings and ignore if out of range
 		if (type > 0 && type <= 7) {
-			if (( sensorTypes[type].min == 0 && sensorTypes[type].max == 0 ) ||
+			if (( sensorTypes[type].min === 0 && sensorTypes[type].max === 0 ) ||
 				(value >= sensorTypes[type].min && value <= sensorTypes[type].max)) {
 
 				// combine readings into JSON-formatted data for posting to emoncms.
@@ -74,11 +74,10 @@ var formatJson = function(readings) {
 			}
 		}
 	}
-	
+
 	return json;
 };
 
 
 exports.Publisher = constructor;
 constructor.prototype.publish = publish;
-

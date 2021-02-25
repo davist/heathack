@@ -21,10 +21,10 @@ var serial = new SP(config.serialport || "/dev/ttyUSB0", {
 
 var nodeData = {
 	nodes: {},
-	
+
 	// number of previous readings to store
 	maxReadings: 20,
-    
+
     // current time to allow client to calculate time since each reading
     currentTime: null
 };
@@ -84,24 +84,24 @@ serial.on("open", function() {
 		}
 
 		node.lastReadingTime = Date.now();
-		
+
 		// rest of tokens are tuples of sensor id, type and value
-		
+
 		// data to publish to emoncms
-		var curReadings = new Array();
-		
+		var curReadings = [];
+
 		for (var i=2; i<tokens.length - 2; i+=3) {
 
 			var sensorid = tokens[i];
 			var type = tokens[i+1];
 			var value = tokens[i+2];
-			
+
 			curReadings.push( {id: sensorid, type: type, value: value} );
-			
+
 			// find sensor object on node
 			var sensor = node.sensors[sensorid];
 
-			// if it doesn't exist, create a new one			
+			// if it doesn't exist, create a new one
 			if (!sensor) {
 				sensor = {};
 				sensor.id = sensorid;
