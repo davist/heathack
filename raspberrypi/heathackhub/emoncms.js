@@ -4,7 +4,7 @@
 // apikey {String}: key for access to relevant EmonCMS account
 // nodeid_offset {Number}: amount to add to node ids to generate emoncms node ids
 
-var request = require('request');
+const fetch = require('node-fetch');
 
 
 // constructor
@@ -42,14 +42,17 @@ var publish = function(nodeid, readings) {
 				.replace("$node", this.nodeid_offset + nodeid)
 				.replace("$json", JSON.stringify(json));
 
-	request(url, function (error, response, body) {
-	  if (error) {
-		console.log("Error publishing to EmonCMS server: " + error);
+	fetch(url)
+	.then(response => {
+	  if (!response.ok) {
+		console.log(response.status + " response from EmonCMS server: ");
+		return response.text();
 	  }
-	  else if (response.statusCode != 200) {
-		console.log(response.statusCode + " response from EmonCMS server: " + body);
-	  }
-	});
+	})
+	.then(text => {
+		if (text) console.log(text);
+	})
+	.catch(error => console.log("Error publishing to EmonCMS server: " + error));
 };
 
 var formatJson = function(readings) {

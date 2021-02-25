@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "dependencies": {
     "express": "^4.12.3",
-    "request": "^2.54.0",
+    "node-fetch": "^2.6.1",
     "serialport": "^1.6.3"
   }
 }
