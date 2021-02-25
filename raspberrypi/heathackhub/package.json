@@ -1,9 +1,9 @@
 {
   "name": "heathack-webserver",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "dependencies": {
     "express": "^4.12.3",
     "node-fetch": "^2.6.1",
-    "serialport": "^1.6.3"
+    "serialport": "^9.0.0"
   }
 }
