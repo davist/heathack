@@ -6,6 +6,9 @@ Also needs a network connection for publishing to EmonCMS.
 1. Install NodeJS. The packaged version in the Raspbian repository is out of date, so download from http://node-arm.herokuapp.com/
 Instructions for downloading and installing on the Pi are on the web page. Currently tested to work with version 0.12.0.
 
+From https://unofficial-builds.nodejs.org/download/release/
+Instructions https://hassancorrigan.com/blog/install-nodejs-on-a-raspberry-pi-zero/
+
 2. From within this directory run 'npm install' to install the required packages.
 
 3. Copy default-config.js to config.js
