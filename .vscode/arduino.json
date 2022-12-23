@@ -1,0 +1,5 @@
+{
+    "board": "arduino:avr:uno",
+    "sketch": "arduino\\JeeNodeEnvironMon\\JeeNodeEnvironMon.ino",
+    "port": "COM3"
+}
