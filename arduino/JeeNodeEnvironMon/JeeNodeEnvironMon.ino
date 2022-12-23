@@ -1,7 +1,7 @@
 /**
  * Default setup is:
  *
- * - A OneWire bus on port 4 data pin supporting multiple DS18B temp sensors.
+ * - A OneWire bus on port 3 data pin supporting multiple DS18B temp sensors.
  * If power is drawn from the A pin instead of +, then the sensors will only be powered
  * when needed to avoid wasting power.
  * Parasitic power mode is supported transparently, though may need a slightly lower value pull-up
@@ -35,7 +35,7 @@
 #define DHT_USE_INTERRUPTS false
 
 // Dallas DS18B switchable parasitic power board
-#define DS18B_PORT 4
+#define DS18B_PORT 3
 
 // room node module
 //#define HYT131_PORT 2   // the temp/humidity sensor

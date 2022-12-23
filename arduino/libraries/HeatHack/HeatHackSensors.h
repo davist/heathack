@@ -89,6 +89,12 @@
 #define DS18B_EIGHTH    0x2
 #define DS18B_SIXTEENTH 0x1
 
+// only bottom 3 bits of TEMP_MSB are significant
+#define DS18B_MSB_VALUE 0x7
+
+// top 5 bits of TEMP_MSB represent the sign
+#define DS18B_NEGATIVE  0xF8
+
 // time in milliseconds to wait after turning on sensor power
 #define DS18B_POWERUP_TIME_MS 50
 
@@ -711,18 +717,30 @@ protected:
     else {
       int16_t temp =
         // start with the whole degrees
-        ((((int16_t) scratchPad[TEMP_MSB]) << 4) | (scratchPad[TEMP_LSB] >> 4)) * 10;
+        ((((int16_t) scratchPad[TEMP_MSB]) << 4) | (scratchPad[TEMP_LSB] >> 4));
+        
+      // sign extend the top 4 bits from TEMP_MSB to ensure negative values are handled correctly
+      // these bits don't hold any temp value
+      temp |= ((temp << 4) & 0xF000);
+
+      // convert to tenths of a degree  
+      temp *= 10;
 
       // add on the 1/10ths
+
+      // is temp +ve or -ve?
+      // done like this to ensure we differentiate between +0 and -0
+      // to correctly add on the fractions
+      bool isNeg = scratchPad[TEMP_MSB] & DS18B_NEGATIVE;
 
       // depending on the resolution, some of the low bits are undefined, so mask them off
       uint8_t fraction16ths = scratchPad[TEMP_LSB] & DS18B_TEMP_MASK;
 
       // convert fraction in 1/16ths to 1/10ths
-      if (fraction16ths & DS18B_HALF)      temp += 5;
-      if (fraction16ths & DS18B_QUARTER)   temp += 2;
-      if (fraction16ths & DS18B_EIGHTH)    temp += 1;
-      if (fraction16ths & DS18B_SIXTEENTH) temp += 1;
+      if (fraction16ths & DS18B_HALF)      isNeg ? temp -= 5 : temp += 5;
+      if (fraction16ths & DS18B_QUARTER)   isNeg ? temp -= 2 : temp += 2;
+      if (fraction16ths & DS18B_EIGHTH)    isNeg ? temp -= 1 : temp += 1;
+      if (fraction16ths & DS18B_SIXTEENTH) isNeg ? temp -= 1 : temp += 1;
 
       return temp;
     }

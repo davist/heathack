@@ -67,6 +67,8 @@
 #define INTERVAL_MIN 1  // 10 secs min
 #define INTERVAL_MAX 60 // 10 mins max
 
+#define DHT_USE_INTERRUPTS false
+
 #include <JeeLib.h>
 
 // need to include OneWire here as it won't get picked up from inside HeatHackSensors.h
@@ -74,8 +76,6 @@
 
 #include "HeatHack.h"
 #include "HeatHackShared.h"
-
-#define DHT_USE_INTERRUPTS false
 #include "HeatHackSensors.h"
 
 // sensor classes
